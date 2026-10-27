@@ -380,3 +380,40 @@ unsafe fn ioctl_int(fd: RawFd, request: libc::c_ulong, value: i32) -> Result<()>
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// If these drift, the kernel rejects the device (or worse, misreads it).
+    #[test]
+    fn ioctl_numbers_match_kernel_headers() {
+        assert_eq!(UI_SET_EVBIT, 0x4004_5564);
+        assert_eq!(UI_SET_KEYBIT, 0x4004_5565);
+        assert_eq!(UI_SET_RELBIT, 0x4004_5566);
+        assert_eq!(UI_SET_ABSBIT, 0x4004_5567);
+        assert_eq!(UI_DEV_CREATE, 0x5501);
+        assert_eq!(UI_DEV_DESTROY, 0x5502);
+        assert_eq!(UI_DEV_SETUP, 0x405C_5503);
+        assert_eq!(UI_ABS_SETUP, 0x401C_5504);
+    }
+
+    #[test]
+    fn structs_match_the_uapi_layout() {
+        assert_eq!(std::mem::size_of::<InputId>(), 8);
+        assert_eq!(std::mem::size_of::<InputAbsInfo>(), 24);
+        assert_eq!(std::mem::size_of::<UinputAbsSetup>(), 28);
+        assert_eq!(std::mem::size_of::<UinputSetup>(), 92);
+        if std::mem::size_of::<usize>() == 8 {
+            assert_eq!(std::mem::size_of::<InputEvent>(), 24);
+        }
+    }
+
+    #[test]
+    fn buttons_resolve() {
+        assert_eq!(button_code("left"), Some(BTN_LEFT));
+        assert_eq!(button_code("RIGHT"), Some(BTN_RIGHT));
+        assert_eq!(button_code("middle"), Some(BTN_MIDDLE));
+        assert_eq!(button_code("thumb"), None);
+    }
+}

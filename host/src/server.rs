@@ -288,3 +288,17 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>
         .map_err(|e| format!("{e:#}"))?;
     Ok(None)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::token_matches;
+
+    #[test]
+    fn tokens_must_match_exactly() {
+        assert!(token_matches("8f0c41a", "8f0c41a"));
+        assert!(!token_matches("8f0c41a", "8f0c41b"));
+        assert!(!token_matches("8f0c41a", "8f0c41"));
+        assert!(!token_matches("8f0c41a", ""));
+        assert!(!token_matches("", "x"));
+    }
+}

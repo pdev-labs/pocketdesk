@@ -278,3 +278,60 @@ fn find_marker(bytes: &[u8], from: usize, marker: u8) -> Option<usize> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jpeg_encoder::{ColorType, Encoder};
+
+    fn jpeg(w: u16, h: u16) -> Vec<u8> {
+        let rgb = vec![0x80u8; w as usize * h as usize * 3];
+        let mut out = Vec::new();
+        Encoder::new(&mut out, 80)
+            .encode(&rgb, w, h, ColorType::Rgb)
+            .expect("encode");
+        out
+    }
+
+    #[test]
+    fn reads_dimensions_without_decoding() {
+        let bytes = jpeg(40, 24);
+        assert_eq!(jpeg_dims(&bytes), Some((40, 24)));
+        assert!(jpeg_frame(bytes).is_ok());
+    }
+
+    #[test]
+    fn rejects_garbage() {
+        assert!(jpeg_dims(b"not a jpeg at all").is_none());
+        assert!(jpeg_frame(vec![0, 1, 2, 3]).is_err());
+    }
+
+    #[test]
+    fn splits_concatenated_mjpeg_stream() {
+        let latest = LatestFrame::new();
+        let mut buffer = jpeg(40, 24);
+        buffer.extend(jpeg(48, 32));
+
+        drain_jpegs(&mut buffer, &latest);
+
+        // Only the freshest frame is kept.
+        let frame = latest.take(Duration::from_millis(10)).expect("frame");
+        assert_eq!((frame.w, frame.h), (48, 32));
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn waits_for_the_rest_of_a_partial_frame() {
+        let latest = LatestFrame::new();
+        let full = jpeg(40, 24);
+        let split = full.len() / 2;
+
+        let mut buffer = full[..split].to_vec();
+        drain_jpegs(&mut buffer, &latest);
+        assert!(latest.take(Duration::from_millis(5)).is_err());
+
+        buffer.extend_from_slice(&full[split..]);
+        drain_jpegs(&mut buffer, &latest);
+        assert_eq!(latest.take(Duration::from_millis(10)).unwrap().w, 40);
+    }
+}

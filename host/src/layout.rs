@@ -159,3 +159,49 @@ impl Monitor {
         self.y + self.height
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dual_monitor() -> Geometry {
+        Geometry {
+            layout: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 3200.0,
+                h: 1080.0,
+            },
+            captured: Rect {
+                x: 1920.0,
+                y: 0.0,
+                w: 1280.0,
+                h: 1080.0,
+            },
+            source: "test".into(),
+        }
+    }
+
+    #[test]
+    fn maps_into_second_monitor() {
+        let geometry = dual_monitor();
+        // Top-left of the streamed screen is 1920px into a 3200px desktop.
+        let (x, y) = geometry.map(0.0, 0.0);
+        assert_eq!((x, y), (19660, 0));
+
+        let (x, y) = geometry.map(1.0, 1.0);
+        assert_eq!((x, y), (32767, 32767));
+    }
+
+    #[test]
+    fn clamps_out_of_range_input() {
+        let geometry = dual_monitor();
+        assert_eq!(geometry.map(-3.0, 9.0), geometry.map(0.0, 1.0));
+    }
+
+    #[test]
+    fn single_monitor_center() {
+        let geometry = Geometry::fallback(1366.0, 768.0);
+        assert_eq!(geometry.map(0.5, 0.5), (16384, 16384));
+    }
+}
