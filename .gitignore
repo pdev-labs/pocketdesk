@@ -1,0 +1,32 @@
+# Rust
+host/target/
+target/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+*.hprof
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local artifacts
+out/
+dist/
+*.apk
+!android/app/build/outputs/**/*.apk
+
+# Secrets
+*.keystore
+*.jks
+.env

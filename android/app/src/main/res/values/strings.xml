@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PocketDesk</string>
+    <string name="tagline">Your desktop, in your pocket.</string>
+    <string name="hint_footer">Start the host on your computer:\n\n  pocketdesk\n\nKeep both devices on the same Wi-Fi, or reach home over Tailscale.</string>
+    <string name="screen_desc">Remote desktop</string>
+</resources>

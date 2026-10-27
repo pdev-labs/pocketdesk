@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#0B0C0F</color>
+    <color name="surface">#14161B</color>
+    <color name="surface_alt">#1A1D24</color>
+    <color name="input_bg">#0E1015</color>
+    <color name="stroke">#262A33</color>
+    <color name="text">#E7E9EE</color>
+    <color name="muted">#8B93A7</color>
+    <color name="faint">#5A6274</color>
+    <color name="accent">#6C8CFF</color>
+    <color name="accent_pressed">#5677EE</color>
+    <color name="accent_tint">#26304C</color>
+    <color name="on_accent">#0B0C0F</color>
+    <color name="good">#5CD6A0</color>
+    <color name="icon_bg">#0B0C0F</color>
+</resources>
