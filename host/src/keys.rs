@@ -46,12 +46,39 @@ pub const KEY_DELETE: u16 = 111;
 pub const KEY_LEFTMETA: u16 = 125;
 pub const KEY_RIGHTMETA: u16 = 126;
 
-/// Letters: KEY_Q is 16 and the alphabet is contiguous from A (30).
+/// Letters are laid out by physical key position, not alphabetically:
+/// Q=16 … P=25, A=30 … L=38, Z=44 … M=50.
 fn letter(c: char) -> Option<u16> {
-    match c.to_ascii_lowercase() {
-        'a'..='z' => Some(30 + (c.to_ascii_lowercase() as u16 - 'a' as u16)),
-        _ => None,
-    }
+    let code = match c.to_ascii_lowercase() {
+        'q' => 16,
+        'w' => 17,
+        'e' => 18,
+        'r' => 19,
+        't' => 20,
+        'y' => 21,
+        'u' => 22,
+        'i' => 23,
+        'o' => 24,
+        'p' => 25,
+        'a' => 30,
+        's' => 31,
+        'd' => 32,
+        'f' => 33,
+        'g' => 34,
+        'h' => 35,
+        'j' => 36,
+        'k' => 37,
+        'l' => 38,
+        'z' => 44,
+        'x' => 45,
+        'c' => 46,
+        'v' => 47,
+        'b' => 48,
+        'n' => 49,
+        'm' => 50,
+        _ => return None,
+    };
+    Some(code)
 }
 
 /// Digits: KEY_1 is 2, KEY_0 is 11.
@@ -209,7 +236,10 @@ mod tests {
     fn letters_and_digits() {
         assert_eq!(for_char('a'), Some((30, false)));
         assert_eq!(for_char('A'), Some((30, true)));
+        assert_eq!(for_char('q'), Some((16, false)));
+        assert_eq!(for_char('b'), Some((48, false)));
         assert_eq!(for_char('z'), Some((44, false)));
+        assert_eq!(for_char('m'), Some((50, false)));
         assert_eq!(for_char('1'), Some((2, false)));
         assert_eq!(for_char('0'), Some((11, false)));
     }
