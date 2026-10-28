@@ -33,17 +33,21 @@ The code may also be sent as `Authorization: Bearer <code>`.
 {
   "t": "hello",
   "app": "pocketdesk",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "codec": "jpeg",
   "fps": 15,
-  "width": 0,
-  "height": 0,
+  "quality": 75,
+  "scale": 1.0,
+  "mode": "mirror",
+  "width": 1366,
+  "height": 768,
   "input": true,
   "input_error": null,
   "read_only": false
 }
 ```
 
+`mode` is `mirror` (the physical monitor) or `extend` (a virtual monitor sized to the phone).
 `width`/`height` may be `0` until the first frame arrives. `input` is `false` when the host cannot inject events; `input_error` then explains why (worth showing verbatim — it usually says how to fix the permission).
 
 ### `size` — the frame dimensions changed
@@ -53,6 +57,16 @@ The code may also be sent as `Authorization: Bearer <code>`.
 ```
 
 Sent before the first frame and whenever the resolution changes.
+
+### `capture` — reply to `set_quality` / `set_display`
+
+```json
+{"t":"capture","fps":20,"quality":82,"scale":1.0,"mode":"extend",
+ "width":1600,"height":720,"output":"pocketdesk-phone","preset":"sharp"}
+```
+
+The values are what the host **actually applied** — fps, quality and scale are
+clamped, so a client must use this reply rather than assume its request won.
 
 ### `stats` — every 5 seconds
 
@@ -87,6 +101,8 @@ Coordinates (`x`, `y`) are normalized **inside the frame**, `0.0 … 1.0`, origi
 | `{"t":"key","name":"enter","mods":["ctrl"]}` | one key tap with modifiers held |
 | `{"t":"key","name":"shift","action":"down"}` | hold a key (`action`: `tap` \| `down` \| `up`) |
 | `{"t":"text","s":"hello world"}` | type a string on a US layout, shift handled by the host |
+| `{"t":"set_quality","fps":20,"quality":82,"scale":1.0}` | reconfigure capture live; any subset of the three fields |
+| `{"t":"set_display","mode":"extend","width":1600,"height":720}` | `extend` creates/resizes a virtual monitor and streams it; `mirror` goes back |
 | `{"t":"ping"}` | answered with `{"t":"pong"}` |
 
 Buttons: `left`, `right`, `middle`.
@@ -103,6 +119,13 @@ leftbrace rightbrace f1 … f12
 Modifiers (`mods`): `ctrl`, `alt`, `shift`, `super` (also `rctrl`, `ralt`, `rshift`, `rmeta`).
 
 Anything else is rejected with an `error` message; the connection is not closed.
+
+`set_quality` and `set_display` change the stream, not the desktop, so they work even
+when the host is `--read-only`. `set_display` needs a compositor with headless
+outputs (Hyprland); otherwise it answers with an `error` and mirroring continues.
+
+The virtual monitor is removed when its creator disconnects, unless it was started
+with `--extend`.
 
 ## Example session
 

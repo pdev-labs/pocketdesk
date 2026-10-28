@@ -30,7 +30,9 @@ H.264 would cut bandwidth 3–5×, but it brings a codec pipeline (SPS/PPS, time
 * frame-independent delivery — every frame is a complete picture, so a dropped packet costs 1/15th of a second, not a keyframe interval;
 * trivial debuggability (`curl`-like tools can inspect the stream).
 
-At 1366×768 / q75 a frame is ~100 KB, so 15 fps ≈ 12 Mbit/s on the LAN. `--scale 0.75` and `--quality 60` halve that when needed. H.264 is planned for v0.2 (see [roadmap](roadmap.md)).
+At 1366×768 / q75 a frame is ~100 KB, so 15 fps ≈ 12 Mbit/s on the LAN. The phone's
+quality presets (`--scale 0.75`, `--quality 45`) cut that by roughly half without
+restarting the host. H.264 is planned for a later release (see [roadmap](roadmap.md)).
 
 ## Capture backends
 
@@ -45,6 +47,52 @@ At 1366×768 / q75 a frame is ~100 KB, so 15 fps ≈ 12 Mbit/s on the LAN. `--sc
 Measured on the reference machine (Hyprland 0.56, 1366×768, Ryzen laptop): `grim` takes ~55–80 ms per frame including process spawn and JPEG encode. That is the practical ceiling of the Wayland backend; the pacer simply stops at the frame budget.
 
 A native `wlr-screencopy` client (no process per frame) is planned and would roughly double the ceiling.
+
+### Live settings
+
+The capture thread does not own its configuration. `CaptureSettings { fps, quality,
+scale, output, cursor }` lives behind an `RwLock` in `AppState`; the thread compares
+its applied copy against the shared one before every frame and, when they differ,
+drops the backend and builds a new one:
+
+```
+phone ── {"t":"set_quality","quality":40,"fps":5} ──► AppState.settings
+                                                          │
+capture thread ── sees a difference ──► drop grim/ffmpeg ──► rebuild
+                                                          │
+phone ◄── {"t":"capture", …applied values…} ◄── reply ─────┘
+```
+
+The reply matters: the host clamps values (fps 1–60, quality 10–95, scale 0.25–1.0),
+and the phone shows what the host actually chose rather than what it asked for.
+Dropping the backend also kills the ffmpeg child, so nothing keeps encoding in the
+background.
+
+## Second screen
+
+"Extend" is the same pipeline pointed at a different monitor.
+
+```
+hyprctl output create headless pocketdesk-phone
+hyprctl eval 'hl.monitor({output="pocketdesk-phone", mode="1600x720",
+                          position="auto-right", scale=1})'
+        │
+        ├── settings.output = "pocketdesk-phone"   → grim -o pocketdesk-phone
+        └── layout::detect()                       → pointer maps into that rectangle
+```
+
+* The output is a real monitor: it gets workspaces, windows can be moved onto it with
+  `Super+Shift+←/→`, and fullscreen works.
+* `layout.rs` needs no special case — the virtual monitor is just another entry in
+  `hyprctl -j monitors`, so the existing two-rectangle mapping (desktop bounding box
+  vs captured monitor) does the right thing.
+* Hyprland 0.5x parses config with Lua, so sizing goes through `hyprctl eval`;
+  older builds fall back to `hyprctl keyword monitor …`.
+* A display created **on request** is tagged `on_demand` and removed when the last
+  client disconnects; one created by `--extend` survives, because the user asked for
+  it at startup.
+* With `--extend` the mode is stable across phone reconnects: the monitor exists
+  before any client arrives.
 
 ## Input model
 

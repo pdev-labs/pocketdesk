@@ -21,7 +21,17 @@
   that asks for confirmation (`StopSessionActivity`), and reopening the app lands back
   in the live session.
 
-## v0.3 — lower bandwidth, real TLS
+## v0.3 — shipped
+
+* **Live quality presets** — fps/quality/scale change from the phone, applied by
+  rebuilding the capture backend; the host replies with the clamped values.
+* **Editable toolbar** — choose which modifiers, navigation keys and F-keys appear;
+  hide the toolbar entirely for a full-screen view and bring it back with a ☰ tab.
+* **Phone as a second screen** — a Hyprland headless monitor sized to the phone's
+  aspect ratio, captured with grim and removed when the phone leaves. Pointer input
+  maps into that monitor like any other output.
+
+## v0.4 — lower bandwidth, real TLS
 
 * **H.264 via MediaCodec** — host-side `libx264` (or VAAPI/NVENC), phone-side hardware
   decoder, `codec: "h264"` in `hello`, automatic fallback to JPEG. Target: 1080p at ~3 Mbit/s.
@@ -29,17 +39,20 @@
   next to the QR, app pins it after pairing. Removes the "trusted LAN only" caveat.
 * **Clipboard sync** — text only, both directions, opt-in.
 
-## v0.4 — every desktop
+## v0.5 — every desktop
 
 * **Windows input** — `SendInput` for pointer and keyboard (capture already works via `gdigrab`).
 * **macOS input** — `CGEvent` plus the Accessibility permission prompt (capture already works via `avfoundation`).
 * **Native Wayland capture** — a `wlr-screencopy` client in-process instead of `grim` per frame; roughly doubles the frame ceiling.
 * **XDG portal capture** — GNOME and KDE on Wayland, using the PipeWire ScreenCast portal with a one-time picker dialog.
+* **Second screen beyond Hyprland** — X11 (`xrandr --setmonitor`), GNOME/KDE virtual
+  monitors, and a Windows virtual display driver.
 
-## v0.5 — a real remote desktop
+## v0.6 — a real remote desktop
 
 * **Audio** — PulseAudio/PipeWire monitor source, Opus, phone speaker.
-* **Multi-monitor switching** — list monitors in the app, switch without restarting.
+* **Monitor switching** — list monitors in the app (physical and virtual) and switch
+  without restarting the host.
 * **File drop** — send a file from the phone into the session.
 * **Wake-on-LAN** — wake a sleeping machine from the app before connecting.
 

@@ -17,12 +17,12 @@
 | Piece | State |
 | --- | --- |
 | Linux host (Hyprland/Sway/grim, X11/ffmpeg) | **Working** — screen, pointer, keyboard |
-| Android client | **Working** — stream, touch pointer, keyboard, QR pairing, background session |
+| Android client | **Working** — stream, touch pointer, keyboard, QR pairing, background session, quality presets, second screen |
 | Windows host | Preview — screen via `gdigrab`, input not implemented yet |
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
 | Clipboard, audio, file transfer | Roadmap |
 
-Screens stream as JPEG at a paced 15 fps by default. On this project's test machine (1366×768, Hyprland, `grim`) that is ~20 fps at ~2 MB/s over Wi-Fi, with end-to-end latency around 100 ms.
+Screens stream as JPEG at a paced 15 fps by default. On this project's test machine (1366×768, Hyprland, `grim`) that is ~20 fps at ~2 MB/s over Wi-Fi, with end-to-end latency around 100 ms. On a slow link, pick a lower preset in the app — the host reconfigures without restarting.
 
 ## Pair once, then it is one tap
 
@@ -103,6 +103,48 @@ The session lives in a foreground service, not in the screen you are looking at:
 
 The stream is letterboxed to your monitor's aspect ratio; the app switches to landscape automatically.
 
+## Quality, keys and full screen
+
+The toolbar is yours. **⋯** in the toolbar opens the session menu:
+
+* **Quality & frame rate** — four presets, applied on the host while you watch:
+  *Low data* (10 fps, q45, 0.75×), *Balanced* (15 fps, q65), *Sharp* (20 fps, q82),
+  *Smooth* (30 fps, q60). The choice is remembered and re-applied on every connect.
+* **Choose keys** — tick the buttons you want in the toolbar: modifiers, Esc/Tab/Enter,
+  arrows, Home/End/PgUp/PgDn, Ins/Del, F1–F12, PrintScreen. **Reset** brings back the
+  default set. The *Keys* (keyboard) and *Exit* buttons are always there.
+* **Hide toolbar (full screen)** — the desktop gets the whole display. A small **☰**
+  tab in the top-right corner brings it back; the setting survives restarts.
+
+There is no fixed limit on how many keys you tick; the row scrolls sideways.
+
+## Use the phone as a second screen
+
+Mirroring copies the laptop panel. *Second screen* instead asks the host for a
+**virtual monitor sized to your phone** and streams *that*, so you get extra desktop
+space rather than a duplicate:
+
+```text
+  eDP-1 (1366×768)                    pocketdesk-phone (1600×720)
+  ┌──────────────┐                    ┌───────────────────────┐
+  │  your work   │                    │  windows you move here│
+  └──────────────┘                    └───────────────────────┘
+          └───────────── one desktop, left to right ──────────┘
+```
+
+In the app: **⋯ → Use phone as a second screen**. The host creates a Hyprland
+headless output named `pocketdesk-phone`, parks it to the right of your desktop, and
+starts capturing it. Move a window onto it with `Super+Shift+←/→`, or launch apps and
+let the compositor place them there. Your touch now drives that monitor, because the
+pointer is mapped into its rectangle.
+
+* Turn it off with **⋯ → Back to mirroring**, or just close the session — the virtual
+  monitor disappears with the last connected phone. Nothing is left behind.
+* Prefer it from the terminal? `pocketdesk --extend 1600x900` starts in that mode;
+  it survives the phone disconnecting.
+* Second screen needs **Hyprland** (it is built on `hyprctl`'s headless outputs).
+  On X11, Windows and macOS, mirroring still works.
+
 ## Why it is built this way
 
 * **Frames are JPEG, not a video stream.** One decoder on the phone, no codec negotiation, no B-frames to buffer. A slow link means fewer frames, never seconds of latency.
@@ -142,6 +184,7 @@ pocketdesk --help
   --output <MONITOR>   e.g. eDP-1; defaults to the focused monitor
   --no-cursor          hide the cursor from the stream
   --no-qr              do not print the pairing QR in the terminal
+  --extend <WxH>       start with a virtual monitor of this size (second screen, Hyprland)
   --read-only          stream only, never inject input
   --print-token        print the saved pairing code and exit
 ```
@@ -169,6 +212,7 @@ host/              Rust daemon: capture, WebSocket server, input injection, pair
   src/capture/     grim (Wayland), ffmpeg (X11/Win/macOS), test pattern
   src/input/       uinput virtual pointer + keyboard (Linux), stubs elsewhere
   src/pairing.rs   short code/QR payload and terminal renderer
+  src/second_screen.rs  Hyprland headless monitor for second-screen mode
 android/           Kotlin app: session hub + foreground service, CameraX/ML Kit scanner
 docs/              architecture, wire protocol, Linux setup, security, roadmap
 ```
@@ -181,7 +225,7 @@ docs/              architecture, wire protocol, Linux setup, security, roadmap
 
 ## Roadmap
 
-H.264 via MediaCodec for ~4× less bandwidth, TLS with certificate pinning, clipboard sync, native input on Windows and macOS, multi-monitor switching, audio. See [docs/roadmap.md](docs/roadmap.md).
+H.264 via MediaCodec for ~4× less bandwidth, TLS with certificate pinning, clipboard sync, native input on Windows and macOS, multi-monitor switching, audio, and second-screen support beyond Hyprland. See [docs/roadmap.md](docs/roadmap.md).
 
 ## License
 

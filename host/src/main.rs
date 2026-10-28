@@ -177,7 +177,7 @@ async fn main() -> Result<()> {
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
+        shutdown_signal().await;
         println!("\n  stopping PocketDesk");
     })
     .await?;
@@ -194,6 +194,32 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Ctrl+C, or `SIGTERM` from systemd/`pkill`. Both must run the cleanup below,
+/// otherwise a virtual monitor would be left behind in the desktop layout.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut terminate = match signal(SignalKind::terminate()) {
+            Ok(handle) => handle,
+            Err(err) => {
+                tracing::warn!("cannot listen for SIGTERM: {err}");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = terminate.recv() => {}
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 /// Re-read the monitor layout into `state.geometry`.

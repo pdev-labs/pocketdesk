@@ -126,6 +126,27 @@ The unit needs the graphical session's environment. On wlroots desktops it usual
 systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR HYPRLAND_INSTANCE_SIGNATURE
 ```
 
+## Second screen (virtual monitor)
+
+`--extend 1600x900` (or **⋯ → Use phone as a second screen** in the app) creates a
+Hyprland headless output and streams that instead of the laptop panel:
+
+```bash
+./pocketdesk --extend 1600x900
+hyprctl monitors | grep pocketdesk-phone   # while it runs
+```
+
+* Hyprland only. It uses `hyprctl output create headless` plus `hl.monitor(...)`
+  (falls back to `hyprctl keyword monitor` on older builds).
+* The phone picks the size from its own aspect ratio (1600 px on the long edge).
+  A 20:9 phone asks for 1600×720.
+* The output is named `pocketdesk-phone`, sits to the right of your desktop, and is
+  removed when the host exits — or, in app-triggered mode, when the last phone
+  disconnects.
+* Move windows onto it with `Super+Shift+←/→`.
+* `--extend` keeps the monitor across phone reconnects. App-triggered mode recreates
+  it on the next connect, because the app remembers the preference.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
@@ -135,7 +156,10 @@ systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR HYPRLAND_INS
 | `input  disabled — cannot open /dev/uinput` | run the setup script, then re-login. Check `ls -l /dev/uinput`. |
 | App shows **view only** | host is `--read-only`, or uinput setup is missing. The exact reason is in the app's toast. |
 | Connection refused | wrong IP/port, firewall, or phone on a guest/AP-isolated network. Test `/healthz` from another machine. |
-| Pointer lands offset from the touch | multi-monitor layout changed after start, or `--output` points at a different monitor. Restart the host; it re-reads `hyprctl` every 20 s. |
-| High latency, stutter | lower `--fps`, `--quality`, or use `--scale 0.75`; check Wi-Fi signal; 2.4 GHz band is often the bottleneck. |
+| Pointer lands offset from the touch | multi-monitor layout changed after start, or `--output` points at a different monitor. The host re-reads `hyprctl` every 4 s; restart it if that is not enough. |
+| `second-screen mode needs Hyprland` | you are on X11, GNOME/KDE Wayland, Windows or macOS. Mirroring still works; extending is Hyprland-only for now. |
+| Virtual monitor appears but is black | no window is on it yet. `Super+Shift+→` moves the focused window over. |
+| A `pocketdesk-phone` monitor is left over | `hyprctl output remove pocketdesk-phone`. Do not create your own output with that name. |
+| High latency, stutter | pick a lower preset in the app (**⋯ → Quality & frame rate**), or start with `--fps 10 --quality 50`; check Wi-Fi signal; 2.4 GHz is often the bottleneck. |
 | Frames at 20 fps but phone shows 8 | phone decoder or Wi-Fi. Try `--scale 0.75 --quality 65`. |
 | Token lost | `./pocketdesk --print-token` |

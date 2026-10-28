@@ -146,12 +146,23 @@ jobs:
             **Background** — the session keeps running when the app is swiped out of recents.
             The notification shows the live fps and its **Stop** action asks for confirmation.
 
+            **Quality** — the toolbar's **⋯** menu has four presets (Low data 10 fps/q45,
+            Balanced, Sharp, Smooth 30 fps). The host reconfigures live and confirms what it applied.
+
+            **Keys & full screen** — choose which modifiers, navigation keys and F-keys appear in the
+            toolbar; hide it entirely for a full-screen view and bring it back with the ☰ tab.
+
+            **Second screen** — **⋯ → Use phone as a second screen** asks the host for a Hyprland
+            headless monitor sized to your phone (1600x720 for a 20:9 display), so it extends the
+            desktop instead of mirroring it. Removed automatically when you disconnect.
+
             **Android** — `pocketdesk.apk` (sideload it). `pocketdesk-debug.apk` is the same app with the debug key.
 
             **Linux** — `pocketdesk-linux-x86_64.tar.gz`, unpack and run `./pocketdesk`.
             First run prints a pairing code and QR; `sudo ./setup-linux-input.sh` enables remote mouse/keyboard.
+            `./pocketdesk --extend 1600x900` starts in second-screen mode.
 
             **Windows / macOS** — binaries are built and stream screens through ffmpeg, but remote input is
-            not implemented yet in v0.2. Treat them as previews (see the roadmap).
+            not implemented yet. Treat them as previews (see the roadmap).
 
             Verify downloads with `SHA256SUMS.txt`.
