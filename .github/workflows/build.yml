@@ -139,12 +139,19 @@ jobs:
           body: |
             PocketDesk ${{ github.ref_name }}
 
+            **Pairing** — run the host and scan the QR code it prints, or type the 8-character
+            code (`K7M4-QX2B`). Tick *Remember this device* for one-tap reconnects, or leave it
+            unticked for a one-time login.
+
+            **Background** — the session keeps running when the app is swiped out of recents.
+            The notification shows the live fps and its **Stop** action asks for confirmation.
+
             **Android** — `pocketdesk.apk` (sideload it). `pocketdesk-debug.apk` is the same app with the debug key.
 
             **Linux** — `pocketdesk-linux-x86_64.tar.gz`, unpack and run `./pocketdesk`.
-            First run prints a pairing token; `sudo ./setup-linux-input.sh` enables remote mouse/keyboard.
+            First run prints a pairing code and QR; `sudo ./setup-linux-input.sh` enables remote mouse/keyboard.
 
             **Windows / macOS** — binaries are built and stream screens through ffmpeg, but remote input is
-            not implemented yet in v0.1. Treat them as previews (see the roadmap).
+            not implemented yet in v0.2. Treat them as previews (see the roadmap).
 
             Verify downloads with `SHA256SUMS.txt`.
