@@ -5,10 +5,13 @@ mod config;
 mod input;
 mod keys;
 mod layout;
+mod pairing;
 mod protocol;
 mod server;
+mod throttle;
 
 use std::{
+    io::IsTerminal,
     net::SocketAddr,
     sync::{
         atomic::{AtomicU32, AtomicU64},
@@ -39,6 +42,7 @@ pub struct AppState {
     pub capture: Arc<CaptureInfo>,
     pub fps_x10: Arc<AtomicU32>,
     pub clients: Arc<AtomicU64>,
+    pub throttle: Arc<throttle::Throttle>,
 }
 
 #[tokio::main]
@@ -64,8 +68,11 @@ async fn main() -> Result<()> {
         Some(explicit) if !explicit.trim().is_empty() => explicit.trim().to_string(),
         _ => config::load_or_create_token()?,
     };
-    if token.len() < 16 {
-        bail!("the pairing token must be at least 16 characters");
+    if config::normalize_token(&token).len() < config::TOKEN_LEN {
+        bail!(
+            "the pairing code must be at least {} characters",
+            config::TOKEN_LEN
+        );
     }
 
     // Latest-frame-wins: capacity 2 is enough to survive a scheduler hiccup
@@ -107,6 +114,7 @@ async fn main() -> Result<()> {
         capture: Arc::new(capture_info),
         fps_x10,
         clients: Arc::new(AtomicU64::new(0)),
+        throttle: Arc::new(throttle::Throttle::new()),
     });
 
     // Re-read the monitor layout now and then, so hot-plugging a screen or
@@ -181,10 +189,32 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
     println!("  stream   {} · {} fps · quality {}", state.capture.backend, state.capture.fps, state.capture.quality);
     println!("  display  {display}");
     println!("  server   http://{address}:{}", cfg.port);
-    println!("  token    {token}");
+    println!("  code     {}", config::pretty_token(token));
     println!("  input    {input}");
     println!();
-    println!("  Phone app → host {address}, port {}, then paste the token.", cfg.port);
+
+    if !cfg.no_qr {
+        let payload = pairing::uri(
+            &address,
+            cfg.port,
+            &config::normalize_token(token),
+            &pairing::hostname(),
+        );
+        if std::io::stdout().is_terminal() {
+            println!("  Scan this with PocketDesk → \"Scan QR\"");
+            match pairing::render_terminal(&payload) {
+                Ok(qr) => print!("{qr}"),
+                Err(err) => tracing::warn!("could not render the pairing QR: {err:#}"),
+            }
+            println!();
+        } else {
+            // Piped output would be garbled with ANSI blocks; the URI is enough.
+            tracing::info!("stdout is not a terminal; pairing URI: {payload}");
+        }
+    }
+
+    println!("  Phone app → scan the QR, or enter {address}:{} and the code above.", cfg.port);
+    println!("  The app remembers this machine unless you untick \"Remember this device\".");
     println!("  Stay on your LAN, or reach it from anywhere over Tailscale/WireGuard.");
     println!();
 }

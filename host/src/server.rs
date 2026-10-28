@@ -24,7 +24,11 @@ use axum::{
 use subtle::ConstantTimeEq;
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::{protocol::ClientMsg, AppState};
+use crate::{
+    config::normalize_token,
+    protocol::ClientMsg,
+    AppState,
+};
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -71,8 +75,9 @@ code {{ background:#0b0c0f; padding:2px 6px; border-radius:6px; color:#8ea1ff; }
   <div class="row"><span>Capture rate</span><span>{fps:.1} fps</span></div>
   <div class="row"><span>Input</span><span>{input}</span></div>
   <div class="row"><span>Endpoint</span><span><code>/ws</code></span></div>
-  <p class="sub" style="margin:24px 0 0">Open the PocketDesk app on your phone and
-  paste this machine's address plus the pairing token printed in the host terminal.</p>
+  <p class="sub" style="margin:24px 0 0">Open PocketDesk on your phone and scan the QR code
+  printed in the host terminal — or type the short code shown there. The app can remember
+  this machine so you only pair once.</p>
 </div></body></html>"#,
         display = html_escape(&display),
         version = state.version,
@@ -110,29 +115,44 @@ async fn upgrade(
             .map(|value| value.to_string())
     });
 
+    let ip = peer.ip();
+    if let Err(remaining) = state.throttle.check(ip) {
+        let seconds = remaining.as_secs().max(1);
+        tracing::warn!(%peer, "rejected connection: locked out for another {seconds}s");
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            format!("too many wrong codes — retry in {seconds}s"),
+        )
+            .into_response();
+    }
+
     match token {
         Some(candidate) if token_matches(&state.token, &candidate) => {
+            state.throttle.success(ip);
             tracing::info!(%peer, "client connected");
             ws.on_upgrade(move |socket| session(socket, state))
         }
         Some(_) => {
-            tracing::warn!(%peer, "rejected connection: invalid token");
-            (StatusCode::UNAUTHORIZED, "invalid token").into_response()
+            state.throttle.fail(ip);
+            tracing::warn!(%peer, "rejected connection: wrong code");
+            (StatusCode::UNAUTHORIZED, "wrong pairing code").into_response()
         }
         None => {
-            tracing::warn!(%peer, "rejected connection: no token");
-            (StatusCode::UNAUTHORIZED, "missing token").into_response()
+            state.throttle.fail(ip);
+            tracing::warn!(%peer, "rejected connection: no code");
+            (StatusCode::UNAUTHORIZED, "missing pairing code").into_response()
         }
     }
 }
 
 fn token_matches(expected: &str, candidate: &str) -> bool {
-    let a = expected.as_bytes();
-    let b = candidate.as_bytes();
-    if a.len() != b.len() {
+    // Accept `k7m4-qx2b`, `K7M4 QX2B` and the canonical form alike.
+    let expected = normalize_token(expected);
+    let candidate = normalize_token(candidate);
+    if expected.is_empty() || expected.len() != candidate.len() {
         return false;
     }
-    a.ct_eq(b).into()
+    expected.as_bytes().ct_eq(candidate.as_bytes()).into()
 }
 
 async fn session(mut socket: WebSocket, state: Arc<AppState>) {
@@ -295,10 +315,12 @@ mod tests {
 
     #[test]
     fn tokens_must_match_exactly() {
-        assert!(token_matches("8f0c41a", "8f0c41a"));
-        assert!(!token_matches("8f0c41a", "8f0c41b"));
-        assert!(!token_matches("8f0c41a", "8f0c41"));
-        assert!(!token_matches("8f0c41a", ""));
+        assert!(token_matches("K7M4QX2B", "K7M4QX2B"));
+        assert!(token_matches("K7M4QX2B", "k7m4-qx2b"));
+        assert!(token_matches("K7M4QX2B", " K7M4 QX2B "));
+        assert!(!token_matches("K7M4QX2B", "K7M4QX2C"));
+        assert!(!token_matches("K7M4QX2B", "K7M4QX2"));
+        assert!(!token_matches("K7M4QX2B", ""));
         assert!(!token_matches("", "x"));
     }
 }

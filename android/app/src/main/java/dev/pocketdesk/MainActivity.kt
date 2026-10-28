@@ -1,13 +1,16 @@
 package dev.pocketdesk
 
+import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -16,20 +19,22 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import dev.pocketdesk.net.HelloInfo
-import dev.pocketdesk.net.PocketDeskClient
 import dev.pocketdesk.net.RemoteInput
 import dev.pocketdesk.net.Stats
+import dev.pocketdesk.service.RemoteService
+import dev.pocketdesk.session.SessionHub
 import dev.pocketdesk.ui.KeySinkEditText
+import dev.pocketdesk.ui.ScanActivity
 import dev.pocketdesk.ui.ScreenView
-import java.net.URLEncoder
 import java.util.Locale
 
-class MainActivity : Activity(), PocketDeskClient.Listener {
+class MainActivity : Activity(), SessionHub.Listener {
 
     private lateinit var prefs: Prefs
 
@@ -39,21 +44,22 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
     private lateinit var portField: EditText
     private lateinit var tokenField: EditText
     private lateinit var connectButton: Button
+    private lateinit var scanButton: Button
+    private lateinit var rememberBox: CheckBox
     private lateinit var statusText: TextView
+    private lateinit var recentRow: View
+    private lateinit var recentHost: TextView
+    private lateinit var recentConnect: TextView
+    private lateinit var recentForget: TextView
     private lateinit var screenView: ScreenView
     private lateinit var keySink: KeySinkEditText
     private lateinit var toolbarButtons: LinearLayout
     private lateinit var statsText: TextView
 
-    private var client: PocketDeskClient? = null
     private var readOnly = false
-    private var userDisconnected = false
-    private var connecting = false
-    private var attempts = 0
-
+    private var backgroundHintShown = false
     private val mods = linkedSetOf<String>()
     private val modifierChips = HashMap<String, TextView>()
-    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +72,13 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
         portField = findViewById(R.id.portField)
         tokenField = findViewById(R.id.tokenField)
         connectButton = findViewById(R.id.connectButton)
+        scanButton = findViewById(R.id.scanButton)
+        rememberBox = findViewById(R.id.rememberBox)
         statusText = findViewById(R.id.statusText)
+        recentRow = findViewById(R.id.recentRow)
+        recentHost = findViewById(R.id.recentHost)
+        recentConnect = findViewById(R.id.recentConnect)
+        recentForget = findViewById(R.id.recentForget)
         screenView = findViewById(R.id.screenView)
         keySink = findViewById(R.id.keySink)
         toolbarButtons = findViewById(R.id.toolbarButtons)
@@ -75,56 +87,135 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
         hostField.setText(prefs.host)
         portField.setText(prefs.port.toString())
         tokenField.setText(prefs.token)
+        rememberBox.isChecked = prefs.remember
+        rememberBox.setOnCheckedChangeListener { _, checked -> prefs.remember = checked }
+        updateRecent()
 
+        scanButton.setOnClickListener {
+            startActivityForResult(Intent(this, ScanActivity::class.java), SCAN_REQUEST)
+        }
         connectButton.setOnClickListener { connect() }
+        recentConnect.setOnClickListener { useSaved() }
+        recentForget.setOnClickListener { forgetSaved() }
 
-        screenView.onMove = { x, y -> if (!readOnly) send(RemoteInput.move(x, y)) }
-        screenView.onButton = { button, down -> if (!readOnly) send(RemoteInput.button(button, down)) }
-        screenView.onClick = { button -> if (!readOnly) send(RemoteInput.click(button)) }
-        screenView.onScroll = { dy, dx -> if (!readOnly) send(RemoteInput.scroll(dy, dx)) }
+        screenView.onMove = { x, y -> send(RemoteInput.move(x, y)) }
+        screenView.onButton = { button, down -> send(RemoteInput.button(button, down)) }
+        screenView.onClick = { button -> send(RemoteInput.click(button)) }
+        screenView.onScroll = { dy, dx -> send(RemoteInput.scroll(dy, dx)) }
 
-        keySink.onText = { text -> if (!readOnly) send(RemoteInput.text(text)) }
+        keySink.onText = { text -> send(RemoteInput.text(text)) }
         keySink.onKeyName = { name -> sendKey(name) }
 
         buildToolbar()
+        SessionHub.addListener(this)
     }
 
-    // ── connection ────────────────────────────────────────────────────
+    // ── connecting ────────────────────────────────────────────────────
 
-    private fun connect() {
+    private fun connect(deviceName: String = "") {
         val host = hostField.text.toString().trim().ifBlank { "127.0.0.1" }
-        val port = portField.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 } ?: Prefs.DEFAULT_PORT
+        val port = portField.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 }
+            ?: Prefs.DEFAULT_PORT
         val token = tokenField.text.toString().trim()
 
-        if (token.length < 8) {
-            statusText.text = "Paste the pairing token printed by the host."
+        if (token.length < 4) {
+            statusText.text = "Scan the QR code, or type the 8-character code from the host."
             return
         }
 
-        prefs.save(host, port, token)
-        userDisconnected = false
-        attempts = 0
-        open(host, port, token)
+        val name = deviceName.ifBlank { if (prefs.host == host) prefs.name else "" }
+        if (rememberBox.isChecked) {
+            prefs.save(host, port, token, name)
+        } else {
+            // "One-time login": nothing is kept after this session.
+            prefs.clearSaved()
+        }
+        updateRecent()
+
+        requestNotificationPermission()
+        SessionHub.connect(host, port, token)
+        // The foreground service keeps the process (and this session) alive when
+        // the task is swiped away.
+        RemoteService.start(this)
     }
 
-    private fun open(host: String, port: Int, token: String) {
-        connecting = true
-        client?.close()
+    private fun useSaved() {
+        if (!prefs.hasSaved) return
+        hostField.setText(prefs.host)
+        portField.setText(prefs.port.toString())
+        tokenField.setText(prefs.token)
+        connect(prefs.name)
+    }
 
-        val url = "ws://$host:$port/ws?token=${URLEncoder.encode(token, "UTF-8")}"
-        statusText.text = "Connecting to $host:$port…"
-        connectButton.isEnabled = false
-        client = PocketDeskClient(this).also { it.connect(url) }
+    private fun forgetSaved() {
+        prefs.clearSaved()
+        hostField.setText("")
+        portField.setText(Prefs.DEFAULT_PORT.toString())
+        tokenField.setText("")
+        updateRecent()
+        statusText.text = "Saved machine forgotten."
+    }
+
+    private fun updateRecent() {
+        if (!prefs.hasSaved) {
+            recentRow.visibility = View.GONE
+            return
+        }
+        recentRow.visibility = View.VISIBLE
+        val label = prefs.name.ifBlank { prefs.host }
+        recentHost.text = "$label · ${prefs.host}:${prefs.port}"
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        }
+    }
+
+    // ── session callbacks (main thread) ───────────────────────────────
+
+    override fun onState(state: SessionHub.State, detail: String?) {
+        when (state) {
+            SessionHub.State.CONNECTING -> {
+                connectButton.isEnabled = false
+                statusText.text = getString(R.string.notification_connecting, SessionHub.target)
+            }
+
+            SessionHub.State.CONNECTED -> {
+                connectButton.isEnabled = true
+                showRemote()
+                statsText.text = if (readOnly) "view only" else "connected"
+            }
+
+            SessionHub.State.RECONNECTING -> {
+                connectButton.isEnabled = true
+                statusText.text = "Connection lost — retrying…"
+                statsText.text = "reconnecting…"
+            }
+
+            SessionHub.State.FAILED -> {
+                connectButton.isEnabled = true
+                showConnectPanel(detail ?: "Disconnected.")
+            }
+
+            SessionHub.State.IDLE -> {
+                connectButton.isEnabled = true
+                if (detail != null) {
+                    showConnectPanel(detail)
+                } else if (remotePanel.visibility == View.VISIBLE) {
+                    showConnectPanel("Disconnected.")
+                }
+            }
+        }
     }
 
     override fun onHello(info: HelloInfo) {
-        connecting = false
-        attempts = 0
         readOnly = info.readOnly || !info.input
-        connectButton.isEnabled = true
-
         showRemote()
         statsText.text = if (readOnly) "view only" else "${info.fps} fps"
+
         if (!info.input && !info.readOnly) {
             toast(info.inputError?.substringBefore('\n') ?: "Host is view-only")
         }
@@ -144,45 +235,17 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
 
     override fun onError(message: String) {
         toast(message)
-        statusText.text = message
     }
 
-    override fun onClosed(reason: String) {
-        connecting = false
-        if (userDisconnected) return
-
-        if (attempts >= 4) {
-            showConnectPanel("Disconnected: $reason")
-            return
-        }
-
-        attempts += 1
-        val delay = (1000L shl (attempts - 1)).coerceAtMost(8000L)
-        statusText.text = "Connection lost — retrying in ${delay / 1000}s"
-        statsText.text = "reconnecting…"
-        handler.postDelayed({
-            if (!userDisconnected) open(prefs.host, prefs.port, prefs.token)
-        }, delay)
-    }
-
-    private fun disconnect() {
-        userDisconnected = true
-        handler.removeCallbacksAndMessages(null)
-        client?.close()
-        client = null
-        connecting = false
-        mods.clear()
-        updateModifierChips()
-        showConnectPanel("Disconnected.")
-    }
-
-    // ── UI state ──────────────────────────────────────────────────────
+    // ── switching screens ─────────────────────────────────────────────
 
     private fun showRemote() {
-        connectPanel.visibility = View.GONE
-        remotePanel.visibility = View.VISIBLE
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        if (remotePanel.visibility != View.VISIBLE) {
+            connectPanel.visibility = View.GONE
+            remotePanel.visibility = View.VISIBLE
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         hideSystemBars()
     }
 
@@ -233,6 +296,28 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
         }
     }
 
+    // ── stopping ──────────────────────────────────────────────────────
+
+    private fun confirmStop() {
+        if (!SessionHub.isLive) {
+            stopSession()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.stop_title)
+            .setMessage(getString(R.string.stop_message, SessionHub.target))
+            .setPositiveButton(R.string.stop_confirm) { _, _ -> stopSession() }
+            .setNegativeButton(R.string.stop_cancel, null)
+            .show()
+    }
+
+    private fun stopSession() {
+        SessionHub.stop(getString(R.string.notification_stopped))
+        RemoteService.stop(this)
+        showConnectPanel("Disconnected.")
+    }
+
     // ── toolbar ───────────────────────────────────────────────────────
 
     private fun buildToolbar() {
@@ -265,7 +350,7 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
             toolbarButtons.addView(chip(label) { sendKey(name) })
         }
 
-        toolbarButtons.addView(chip("Exit") { disconnect() })
+        toolbarButtons.addView(chip("Exit") { confirmStop() })
     }
 
     private fun chip(label: String, onClick: () -> Unit): TextView {
@@ -325,7 +410,8 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
     }
 
     private fun send(payload: String) {
-        client?.send(payload)
+        if (readOnly) return
+        SessionHub.send(payload)
     }
 
     private fun toast(message: String) {
@@ -339,9 +425,22 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         if (remotePanel.visibility == View.VISIBLE) {
-            disconnect()
+            // Keep the session; it lives in the foreground service.
+            moveTaskToBack(true)
+            if (!backgroundHintShown) {
+                backgroundHintShown = true
+                toast(getString(R.string.background_hint))
+            }
         } else {
             super.onBackPressed()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (SessionHub.isLive) {
+            showRemote()
+            SessionHub.lastStats?.let { onStats(it) }
         }
     }
 
@@ -351,9 +450,37 @@ class MainActivity : Activity(), PocketDeskClient.Listener {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
-        client?.close()
-        client = null
+        SessionHub.removeListener(this)
         super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SCAN_REQUEST || resultCode != RESULT_OK) return
+
+        val raw = data?.getStringExtra(ScanActivity.EXTRA_URI) ?: return
+        val uri = Uri.parse(raw)
+        if (uri.scheme != "pocketdesk") {
+            toast(getString(R.string.not_a_pocketdesk_code))
+            return
+        }
+
+        val host = uri.getQueryParameter("host") ?: return
+        val port = uri.getQueryParameter("port")?.toIntOrNull() ?: Prefs.DEFAULT_PORT
+        val token = uri.getQueryParameter("token") ?: return
+        val name = uri.getQueryParameter("name").orEmpty()
+
+        hostField.setText(host)
+        portField.setText(port.toString())
+        tokenField.setText(token)
+
+        statusText.text = if (name.isBlank()) "Paired with $host" else "Paired with $name"
+        connect(name)
+    }
+
+    private companion object {
+        const val SCAN_REQUEST = 42
+        const val REQUEST_NOTIFICATIONS = 43
     }
 }

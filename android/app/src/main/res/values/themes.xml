@@ -12,6 +12,15 @@
         <item name="android:windowLightNavigationBar">false</item>
     </style>
 
+    <!-- Used by the "Stop session?" confirmation opened from the notification. -->
+    <style name="Theme.PocketDesk.Dialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:colorAccent">@color/accent</item>
+    </style>
+
     <style name="FieldLabel">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

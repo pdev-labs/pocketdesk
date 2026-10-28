@@ -2,6 +2,36 @@
 <resources>
     <string name="app_name">PocketDesk</string>
     <string name="tagline">Your desktop, in your pocket.</string>
-    <string name="hint_footer">Start the host on your computer:\n\n  pocketdesk\n\nKeep both devices on the same Wi-Fi, or reach home over Tailscale.</string>
+    <string name="hint_footer">Start the host on your computer:\n\n  pocketdesk\n\nIt prints a QR code and a short 8-character code. Scan the QR — or type the code.</string>
+
     <string name="screen_desc">Remote desktop</string>
+
+    <string name="scan_qr">Scan QR code</string>
+    <string name="or_manual">or connect manually</string>
+    <string name="remember_device">Remember this device</string>
+    <string name="remember_hint">Keep the machine and code saved, so next time is one tap.</string>
+
+    <string name="recent_label">LAST CONNECTION</string>
+    <string name="reconnect">Reconnect</string>
+    <string name="forget">Forget</string>
+
+    <string name="stop_title">Stop remote session?</string>
+    <string name="stop_message">Your phone will disconnect from %1$s. You can reconnect from the app at any time.</string>
+    <string name="stop_confirm">Stop</string>
+    <string name="stop_cancel">Keep running</string>
+
+    <string name="camera_hint">Point the camera at the QR code in the PocketDesk terminal</string>
+    <string name="camera_cancel">Cancel</string>
+    <string name="camera_permission">Camera permission is needed to scan the pairing QR code.</string>
+    <string name="not_a_pocketdesk_code">That QR code is not a PocketDesk pairing code.</string>
+    <string name="background_hint">Still connected in the background. Use the notification or Exit to stop.</string>
+
+    <string name="notification_channel">Remote session</string>
+    <string name="notification_channel_desc">Keeps the remote desktop connection alive when the app is in the background</string>
+    <string name="notification_connecting">Connecting to %1$s…</string>
+    <string name="notification_connected">Streaming %1$s</string>
+    <string name="notification_streaming">Streaming %1$s · %2$d fps</string>
+    <string name="notification_reconnecting">Reconnecting to %1$s…</string>
+    <string name="notification_disconnected">Disconnected</string>
+    <string name="notification_stopped">Session stopped</string>
 </resources>

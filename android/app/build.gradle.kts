@@ -15,8 +15,8 @@ android {
         applicationId = "dev.pocketdesk"
         minSdk = 26
         targetSdk = 35
-        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 1
-        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.1.0"
+        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 2
+        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.2.0"
     }
 
     if (!ciKeystore.isNullOrBlank()) {
@@ -65,5 +65,14 @@ android {
 }
 
 dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity:1.9.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // QR pairing: CameraX preview + on-device barcode decoding.
+    implementation("androidx.camera:camera-core:1.4.1")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 }

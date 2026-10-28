@@ -74,6 +74,10 @@ pub struct Config {
     #[arg(long)]
     pub print_token: bool,
 
+    /// Do not print the pairing QR code in the terminal.
+    #[arg(long)]
+    pub no_qr: bool,
+
     /// Show verbose logs.
     #[arg(long)]
     pub verbose: bool,
@@ -136,14 +140,41 @@ fn save_token(token: &str) -> Result<()> {
     Ok(())
 }
 
-/// 32 random bytes, hex encoded.
+/// Pairing codes are short enough to read out loud: 8 characters picked from a
+/// 31-symbol alphabet (~40 bits), shown as `K7M4-QX2B`. Wrong guesses are
+/// throttled per address, and most people pair by scanning the QR anyway.
+pub const TOKEN_LEN: usize = 8;
+
+/// No 0/O, 1/I/L: all the characters that get mistyped.
+const ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+
 pub fn random_token() -> String {
-    use rand::RngCore;
-    let mut bytes = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    let mut out = String::with_capacity(64);
-    for b in bytes {
-        out.push_str(&format!("{b:02x}"));
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    (0..TOKEN_LEN)
+        .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+        .collect()
+}
+
+/// Accept `k7m4-qx2b`, `K7M4 QX2B` or `K7M4QX2B` and compare only the useful
+/// characters. Tokens saved by older versions (64 hex chars) still work.
+pub fn normalize_token(input: &str) -> String {
+    input
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_uppercase())
+        .collect()
+}
+
+/// Grouped for humans: `K7M4-QX2B`.
+pub fn pretty_token(token: &str) -> String {
+    let token = normalize_token(token);
+    let mut out = String::with_capacity(token.len() + token.len() / 4);
+    for (index, ch) in token.chars().enumerate() {
+        if index > 0 && index % 4 == 0 {
+            out.push('-');
+        }
+        out.push(ch);
     }
     out
 }
@@ -158,5 +189,29 @@ pub fn lan_ip() -> Option<std::net::IpAddr> {
         None
     } else {
         Some(ip)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokens_are_short_and_unambiguous() {
+        for _ in 0..64 {
+            let token = random_token();
+            assert_eq!(token.len(), TOKEN_LEN);
+            assert!(token.bytes().all(|b| ALPHABET.contains(&b)));
+            assert!(!token.chars().any(|c| "0O1IL".contains(c)));
+        }
+    }
+
+    #[test]
+    fn normalization_accepts_typed_variants() {
+        assert_eq!(normalize_token("k7m4-qx2b"), "K7M4QX2B");
+        assert_eq!(normalize_token(" K7M4 QX2B "), "K7M4QX2B");
+        assert_eq!(pretty_token("K7M4QX2B"), "K7M4-QX2B");
+        assert_eq!(pretty_token("k7m4-qx2b"), "K7M4-QX2B");
+        assert_eq!(pretty_token(""), "");
     }
 }

@@ -67,11 +67,15 @@ DISPLAY=:0 ./pocketdesk --capture ffmpeg --fps 25 --scale 0.75
 ./pocketdesk --bind 127.0.0.1
 ```
 
-The pairing token is stored at `~/.config/pocketdesk/token` (mode `0600`) and reused across runs. Rotate it with:
+The pairing code is stored at `~/.config/pocketdesk/token` (mode `0600`) and reused across runs.
+The host prints it as `K7M4-QX2B`, together with a scannable QR code. Rotate it with:
 
 ```bash
-rm ~/.config/pocketdesk/token && ./pocketdesk   # prints a fresh token
+rm ~/.config/pocketdesk/token && ./pocketdesk   # prints a fresh code + QR
 ```
+
+No QR in the terminal (CI logs, `tmux` without a TTY, a pipe)? Use `--no-qr`, or read the
+pairing URI from the verbose log. The app can still be paired by typing the 8-character code.
 
 ## Firewall
 

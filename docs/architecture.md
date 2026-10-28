@@ -87,9 +87,48 @@ Input feels faster than video because pointer events take the direct path (~5 ms
 * Capture error → logged, retried after 750 ms; the phone keeps the last frame.
 * Input unavailable (no `/dev/uinput`) → stream continues, `hello` reports `input: false` with the reason, app shows **view only**.
 * Slow client / congested link → broadcast lag drops frames, never blocks capture.
-* Phone sleeps / network drops → OkHttp reconnects; the app retries four times with exponential backoff (1, 2, 4, 8 s) before returning to the pairing screen.
-* Host dies → socket closes, the phone shows "Connection lost" and retries.
+* Phone sleeps / app backgrounded → the foreground service keeps the process and the hub reconnects (1, 2, 4, 8 s, five attempts).
+* Host dies → socket closes, the phone shows "Connection lost" and retries; after five failures the service stops and the app returns to the pairing screen with the reason.
 
-## What is intentionally missing in v0.1
+## Pairing
+
+Two paths, one secret:
+
+1. **QR** — the host renders `pocketdesk://pair?v=1&host=…&port=…&token=…&name=…`
+   as ANSI half-blocks (black modules on a white quiet zone, so it scans from a
+   dark terminal). The app scans it with CameraX + ML Kit, fills every field and
+   connects.
+2. **Typed code** — the same token, 8 characters, compared case-insensitively
+   while ignoring dashes and spaces.
+
+The renderer is tested by decoding its matrix with an independent QR decoder
+(`rqrr`) in CI, so a broken QR fails the build rather than the user's first run.
+
+## Android session lifecycle
+
+The session is **not** owned by the Activity:
+
+```
+MainActivity ──attach/detach──► SessionHub (singleton) ◄──listener── RemoteService
+     │                              │
+     │ renders frames               └── PocketDeskClient (WebSocket, decoder thread)
+     ▼
+  ScreenView
+```
+
+* `SessionHub` owns the socket, the last frame, hello and stats. It survives
+  configuration changes and Activity destruction.
+* `RemoteService` is a `specialUse` foreground service. It holds the process
+  alive when the task is swiped out of recents, and it is the only place the
+  notification exists.
+* The notification shows the live state/fps and a **Stop** action. Stop opens a
+  translucent `StopSessionActivity` with a confirmation dialog — a single
+  accidental tap cannot kill a session.
+* Reopening the app re-attaches to the hub and the last frame is drawn before the
+  network even answers.
+* Reconnects (1, 2, 4, 8 s, five attempts) run inside the hub, so they continue
+  while the app is in the background.
+
+## What is intentionally missing
 
 Clipboard, audio, file transfer, multi-monitor switching, TLS, Windows/macOS input. All are additive; none require changing the frame or input model.

@@ -5,8 +5,11 @@ PocketDesk gives whoever holds the pairing token full control of a desktop sessi
 ## What is protected
 
 * **Every screen byte requires the token.** `/ws` compares it in constant time (`subtle::ConstantTimeEq`), rejects missing/wrong tokens with `401`, and never falls back to anonymous access.
-* **Token at rest** — `~/.config/pocketdesk/token`, created with mode `0600` inside `~/.config/pocketdesk`.
-* **Token strength** — 32 bytes from `OsRng`, printed as 64 hex characters.
+* **Code at rest** — `~/.config/pocketdesk/token`, created with mode `0600` inside `~/.config/pocketdesk`.
+* **Code strength** — 8 characters from a 31-symbol alphabet (~40 bits), printed as `K7M4-QX2B`.
+  Six free attempts per address, then a lock that starts at one minute and doubles to
+  fifteen: guessing is not practical over a socket. The QR carries the same code, so
+  scanning is exactly as strong as typing it.
 * **No third-party services.** No telemetry, no relay, no accounts. The host connects to nothing; only the phone dials in.
 
 ## What is *not* protected in v0.1
@@ -30,6 +33,13 @@ Do **not** port-forward `8765` to the public internet. If you must, put a TLS-te
 | Shared machine | `--read-only`, or a dedicated token you rotate afterwards. |
 | Lost phone | Delete `~/.config/pocketdesk/token` and restart the host. The old token stops working immediately. |
 | Auditing | `pocketdesk --verbose` logs every connection and rejection with the peer address. |
+
+## The pairing code
+
+The code is short so it can be typed, and the QR exists so it rarely has to be.
+It is *not* a password you should reuse elsewhere: rotating it is one command
+(delete the file, restart the host). Older 64-character tokens keep working,
+and the comparison accepts either form.
 
 ## What a stolen token grants
 
