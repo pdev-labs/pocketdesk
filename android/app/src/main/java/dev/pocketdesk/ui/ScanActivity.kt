@@ -2,6 +2,7 @@ package dev.pocketdesk.ui
 
 import android.Manifest
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -35,6 +36,17 @@ class ScanActivity : ComponentActivity() {
     private var scanner: BarcodeScanner? = null
     private var handled = false
 
+    private val cameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            startCamera()
+        } else {
+            Toast.makeText(this, R.string.camera_permission, Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_scan)
@@ -52,21 +64,7 @@ class ScanActivity : ComponentActivity() {
         if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
         } else {
-            requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA)
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray,
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_CAMERA && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            startCamera()
-        } else {
-            Toast.makeText(this, R.string.camera_permission, Toast.LENGTH_LONG).show()
-            finish()
+            cameraPermission.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -138,6 +136,5 @@ class ScanActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_URI = "uri"
-        private const val REQUEST_CAMERA = 7
     }
 }
