@@ -96,6 +96,10 @@ pub struct CaptureInfo {
     pub height: u32,
 }
 
+/// The most recent frame, shared with the server so a phone that connects (or
+/// resumes) while the screen is static still gets a picture immediately.
+pub type SharedFrame = Arc<std::sync::Mutex<Option<Arc<Frame>>>>;
+
 pub trait Capture: Send {
     fn next_frame(&mut self) -> Result<Frame>;
     /// Frame size before the first frame arrives, if the backend knows it.
@@ -137,6 +141,7 @@ pub fn spawn(
     settings: Arc<RwLock<CaptureSettings>>,
     tx: broadcast::Sender<Arc<Frame>>,
     fps_x10: Arc<AtomicU32>,
+    latest: SharedFrame,
 ) -> Result<CaptureInfo> {
     let backend_name = match plan.backend {
         Backend::Grim => "grim (wayland)",
@@ -153,7 +158,7 @@ pub fn spawn(
 
     std::thread::Builder::new()
         .name("pocketdesk-capture".to_string())
-        .spawn(move || capture_loop(plan, settings, tx, fps_x10))
+        .spawn(move || capture_loop(plan, settings, tx, fps_x10, latest))
         .map_err(|e| anyhow::anyhow!("spawning capture thread: {e}"))?;
 
     Ok(info)
@@ -173,9 +178,13 @@ fn capture_loop(
     settings: Arc<RwLock<CaptureSettings>>,
     tx: broadcast::Sender<Arc<Frame>>,
     fps_x10: Arc<AtomicU32>,
+    latest: SharedFrame,
 ) {
     let mut backend: Option<Box<dyn Capture>> = None;
     let mut applied: Option<CaptureSettings> = None;
+    // The previous frame's bytes. JPEG is deterministic, so an unchanged
+    // desktop produces byte-identical output: no need to send it again.
+    let mut previous: Option<Bytes> = None;
 
     let mut window = Instant::now();
     let mut frames = 0u32;
@@ -189,6 +198,7 @@ fn capture_loop(
             // Drop the backend too: an ffmpeg child would keep encoding.
             backend = None;
             applied = None;
+            previous = None;
             std::thread::sleep(Duration::from_millis(150));
             continue;
         }
@@ -243,7 +253,12 @@ fn capture_loop(
         match capture.next_frame() {
             Ok(frame) => {
                 frames += 1;
-                let _ = tx.send(Arc::new(frame));
+                if previous.as_ref() != Some(&frame.jpeg) {
+                    previous = Some(frame.jpeg.clone());
+                    let shared = Arc::new(frame);
+                    *latest.lock().unwrap_or_else(|e| e.into_inner()) = Some(shared.clone());
+                    let _ = tx.send(shared);
+                }
             }
             Err(err) => {
                 tracing::warn!("capture failed: {err:#}");

@@ -45,6 +45,22 @@
     <string name="second_screen_ready">Second screen ready · %1$d×%2$d. Move a window to it with Super+Shift+arrow.</string>
     <string name="second_screen_asking">Creating a %1$d×%2$d virtual monitor…</string>
     <string name="mirroring_again">Mirroring the desktop again.</string>
+    <string name="update_available">UPDATE AVAILABLE</string>
+    <string name="update_detail">PocketDesk %1$s · %2$s · tap Install</string>
+    <string name="update_install">Install</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">DOWNLOADING</string>
+    <string name="update_ready">Opening the installer…</string>
+    <string name="update_failed">Update failed: %1$s</string>
+    <string name="update_up_to_date">PocketDesk is up to date.</string>
+    <string name="update_check_failed">Could not check for updates: %1$s</string>
+    <string name="update_permission_title">Allow app installs</string>
+    <string name="update_permission_message">Android needs permission for PocketDesk to install its own updates. Allow it, then tap Install again.</string>
+    <string name="update_permission_open">Open settings</string>
+    <string name="update_session_title">Update available</string>
+    <string name="update_session_message">PocketDesk %1$s is ready to download. Installing it closes this remote session.</string>
+    <string name="update_session_confirm">Stop session &amp; install</string>
+    <string name="menu_check_updates">Check for updates</string>
     <string name="second_screen_needs_host">The host could not create a virtual monitor. Second-screen mode needs Hyprland; mirroring still works.</string>
 
     <string name="notification_channel">Remote session</string>

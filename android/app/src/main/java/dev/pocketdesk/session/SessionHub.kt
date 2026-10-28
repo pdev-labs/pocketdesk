@@ -43,6 +43,7 @@ object SessionHub : PocketDeskClient.Listener {
     private var token = ""
     private var attempts = 0
     private var stopped = false
+    private var visible = true
 
     var state: State = State.IDLE
         private set
@@ -104,6 +105,18 @@ object SessionHub : PocketDeskClient.Listener {
         client?.send(payload)
     }
 
+    /**
+     * Tell the host whether anyone is looking. While hidden it stops sending
+     * frames (the socket, stats and pings stay up), which saves battery and
+     * bandwidth; on return the latest frame is pushed immediately.
+     */
+    fun setVisible(value: Boolean) {
+        if (visible == value) return
+        visible = value
+        client?.setDecodeEnabled(value)
+        sendAlways(if (value) "{\"t\":\"resume\"}" else "{\"t\":\"pause\"}")
+    }
+
     /** Change fps/quality/scale live; the host clamps and confirms. */
     fun setQuality(fps: Int? = null, quality: Int? = null, scale: Double? = null) {
         val payload = JSONObject().put("t", "set_quality")
@@ -147,6 +160,8 @@ object SessionHub : PocketDeskClient.Listener {
         readOnly = info.readOnly || !info.input
         attempts = 0
         publish(State.CONNECTED, null)
+        // Reconnected while in the background: do not start streaming yet.
+        if (!visible) sendAlways("{\"t\":\"pause\"}")
         listeners.forEach { it.onHello(info) }
     }
 
@@ -203,7 +218,10 @@ object SessionHub : PocketDeskClient.Listener {
         publish(if (attempts > 0) State.RECONNECTING else State.CONNECTING, null)
 
         val url = "ws://$host:$port/ws?token=${URLEncoder.encode(token, "UTF-8")}"
-        client = PocketDeskClient(this).also { it.connect(url) }
+        client = PocketDeskClient(this).also {
+            it.setDecodeEnabled(visible)
+            it.connect(url)
+        }
     }
 
     private fun publish(next: State, detail: String?) {

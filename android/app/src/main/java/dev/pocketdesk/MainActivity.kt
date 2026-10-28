@@ -12,6 +12,9 @@ import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -34,6 +37,10 @@ import dev.pocketdesk.session.SessionHub
 import dev.pocketdesk.ui.KeySinkEditText
 import dev.pocketdesk.ui.ScanActivity
 import dev.pocketdesk.ui.ScreenView
+import dev.pocketdesk.updates.CheckResult
+import dev.pocketdesk.updates.UpdateInfo
+import dev.pocketdesk.updates.Updater
+import java.io.File
 import java.util.Locale
 
 class MainActivity : Activity(), SessionHub.Listener {
@@ -65,10 +72,28 @@ class MainActivity : Activity(), SessionHub.Listener {
     private lateinit var toolbarHandle: TextView
     private lateinit var toolbarButtons: LinearLayout
     private lateinit var statsText: TextView
+    private lateinit var updateRow: View
+    private lateinit var updateTitle: TextView
+    private lateinit var updateDetail: TextView
+    private lateinit var updateAction: TextView
+    private lateinit var updateLater: TextView
+
+    private val updater by lazy { Updater(this) }
+    private var pendingUpdate: UpdateInfo? = null
+    private var pendingApk: File? = null
 
     private var readOnly = false
     private var backgroundHintShown = false
     private var appliedForSession = false
+    private var resumed = false
+
+    // Auto-quality: compare what the host sent with what this phone managed to
+    // draw. Two bad windows in a row drop one preset, once per session.
+    private val ui = Handler(Looper.getMainLooper())
+    private var renderedFrames = 0
+    private var healthStart = 0L
+    private var slowWindows = 0
+    private var autoDowngraded = false
     private var captureState: CaptureState? = null
     private val mods = linkedSetOf<String>()
     private val modifierChips = HashMap<String, TextView>()
@@ -97,6 +122,11 @@ class MainActivity : Activity(), SessionHub.Listener {
         toolbarHandle = findViewById(R.id.toolbarHandle)
         toolbarButtons = findViewById(R.id.toolbarButtons)
         statsText = findViewById(R.id.statsText)
+        updateRow = findViewById(R.id.updateRow)
+        updateTitle = findViewById(R.id.updateTitle)
+        updateDetail = findViewById(R.id.updateDetail)
+        updateAction = findViewById(R.id.updateAction)
+        updateLater = findViewById(R.id.updateLater)
 
         hostField.setText(prefs.host)
         portField.setText(prefs.port.toString())
@@ -112,6 +142,8 @@ class MainActivity : Activity(), SessionHub.Listener {
         recentConnect.setOnClickListener { useSaved() }
         recentForget.setOnClickListener { forgetSaved() }
         toolbarHandle.setOnClickListener { setToolbarHidden(false) }
+        updateAction.setOnClickListener { startUpdate() }
+        updateLater.setOnClickListener { updateRow.visibility = View.GONE }
 
         screenView.onMove = { x, y -> send(RemoteInput.move(x, y)) }
         screenView.onButton = { button, down -> send(RemoteInput.button(button, down)) }
@@ -124,6 +156,10 @@ class MainActivity : Activity(), SessionHub.Listener {
         buildToolbar()
         applyToolbarVisibility()
         SessionHub.addListener(this)
+
+        // Quiet check on launch: costs one HEAD-sized request, at most every
+        // few hours, and never blocks the connect screen.
+        maybeCheckForUpdates(force = false)
     }
 
     // ── connecting ────────────────────────────────────────────────────
@@ -267,6 +303,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
 
     override fun onFrame(bitmap: Bitmap) {
+        renderedFrames++
         screenView.setFrame(bitmap)
     }
 
@@ -314,6 +351,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         }
         applyToolbarVisibility()
         hideSystemBars()
+        if (resumed) startHealthCheck()
     }
 
     private fun showConnectPanel(message: String) {
@@ -325,6 +363,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         hideKeyboard()
         statusText.text = message
         connectButton.isEnabled = true
+        stopHealthCheck()
         applyToolbarVisibility()
     }
 
@@ -386,6 +425,113 @@ class MainActivity : Activity(), SessionHub.Listener {
         appliedForSession = false
         captureState = null
         showConnectPanel("Disconnected.")
+    }
+
+    // ── updates ───────────────────────────────────────────────────────
+
+    private fun maybeCheckForUpdates(force: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!force && now - prefs.lastUpdateCheck < UPDATE_CHECK_INTERVAL) return
+        prefs.lastUpdateCheck = now
+
+        updater.check { result ->
+            when (result) {
+                is CheckResult.Available -> showUpdateCard(result.info)
+                CheckResult.UpToDate -> if (force) toast(getString(R.string.update_up_to_date))
+                is CheckResult.Failed ->
+                    if (force) toast(getString(R.string.update_check_failed, result.message))
+            }
+        }
+    }
+
+    private fun showUpdateCard(info: UpdateInfo) {
+        pendingUpdate = info
+        updateRow.visibility = View.VISIBLE
+        updateTitle.setText(R.string.update_available)
+        updateAction.text = getString(R.string.update_install)
+        updateAction.isEnabled = true
+        updateLater.visibility = View.VISIBLE
+        updateDetail.text = getString(
+            R.string.update_detail,
+            info.version,
+            formatSize(info.size),
+        )
+    }
+
+    private fun startUpdate() {
+        val ready = pendingApk
+        if (ready != null && ready.exists()) {
+            installUpdate(ready)
+            return
+        }
+
+        val info = pendingUpdate ?: return
+        if (SessionHub.isLive) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.update_session_title)
+                .setMessage(getString(R.string.update_session_message, info.version))
+                .setPositiveButton(R.string.update_session_confirm) { _, _ ->
+                    stopSession()
+                    downloadUpdate(info)
+                }
+                .setNegativeButton(R.string.update_later, null)
+                .show()
+            return
+        }
+
+        downloadUpdate(info)
+    }
+
+    private fun downloadUpdate(info: UpdateInfo) {
+        updateAction.isEnabled = false
+        updateAction.text = "0%"
+        updateLater.visibility = View.GONE
+        updateTitle.setText(R.string.update_downloading)
+
+        updater.download(
+            info,
+            onProgress = { percent -> updateAction.text = "$percent%" },
+            onDone = { file, error ->
+                updateAction.isEnabled = true
+                updateAction.text = getString(R.string.update_install)
+                updateTitle.setText(R.string.update_available)
+
+                if (file == null) {
+                    updateLater.visibility = View.VISIBLE
+                    toast(getString(R.string.update_failed, error ?: "unknown error"))
+                    return@download
+                }
+                pendingApk = file
+                installUpdate(file)
+            },
+        )
+    }
+
+    private fun installUpdate(file: File) {
+        if (!updater.canInstall()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.update_permission_title)
+                .setMessage(R.string.update_permission_message)
+                .setPositiveButton(R.string.update_permission_open) { _, _ ->
+                    runCatching { startActivity(updater.unknownSourcesSettings()) }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+
+        if (updater.install(file)) {
+            toast(getString(R.string.update_ready))
+        } else {
+            // No handler for package:// — send people to the release page.
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, updater.releasesPage())) }
+        }
+    }
+
+    private fun formatSize(bytes: Long): String {
+        if (bytes <= 0) return "APK"
+        val mb = bytes / 1_000_000.0
+        return String.format(Locale.US, "%.1f MB", mb)
     }
 
     // ── toolbar ───────────────────────────────────────────────────────
@@ -451,6 +597,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             getString(R.string.menu_quality),
             if (prefs.secondScreen) getString(R.string.menu_mirror) else getString(R.string.menu_extend),
             getString(R.string.menu_hide_toolbar),
+            getString(R.string.menu_check_updates),
         )
 
         AlertDialog.Builder(this)
@@ -460,6 +607,7 @@ class MainActivity : Activity(), SessionHub.Listener {
                     1 -> pickQuality()
                     2 -> toggleSecondScreen()
                     3 -> setToolbarHidden(true)
+                    4 -> maybeCheckForUpdates(force = true)
                 }
             }
             .show()
@@ -506,6 +654,64 @@ class MainActivity : Activity(), SessionHub.Listener {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun startHealthCheck() {
+        ui.removeCallbacks(healthCheck)
+        renderedFrames = 0
+        slowWindows = 0
+        healthStart = SystemClock.elapsedRealtime()
+        ui.postDelayed(healthCheck, HEALTH_INTERVAL)
+    }
+
+    private fun stopHealthCheck() {
+        ui.removeCallbacks(healthCheck)
+    }
+
+    private val healthCheck = object : Runnable {
+        override fun run() {
+            if (!resumed || !SessionHub.isLive) return
+
+            val now = SystemClock.elapsedRealtime()
+            val elapsed = (now - healthStart).coerceAtLeast(1)
+            val rendered = renderedFrames * 1000.0 / elapsed
+            renderedFrames = 0
+            healthStart = now
+
+            val stats = SessionHub.lastStats
+            // Only judge when the host is actually sending something: a static
+            // desktop legitimately delivers almost no frames.
+            if (stats != null && stats.fps >= 8 && rendered < stats.fps * 0.6) {
+                slowWindows++
+                if (slowWindows >= 2 && !autoDowngraded) {
+                    autoDowngraded = true
+                    autoDowngrade()
+                }
+            } else {
+                slowWindows = 0
+            }
+
+            ui.postDelayed(this, HEALTH_INTERVAL)
+        }
+    }
+
+    /**
+     * The phone could not keep up for ~10 s. Step down one preset for this
+     * session (nothing is saved, so the next session starts where you left it).
+     */
+    private fun autoDowngrade() {
+        val current = prefs.quality.takeIf { it > 0 } ?: captureState?.quality ?: 65
+        val index = PRESETS.indexOfFirst { it.quality == current }
+        val next = when {
+            index < 0 -> null
+            PRESETS[index].fps >= 25 -> PRESETS[1]   // smooth -> balanced
+            index == 2 -> PRESETS[1]                 // sharp  -> balanced
+            index == 1 -> PRESETS[0]                 // balanced -> low data
+            else -> null
+        } ?: return
+
+        SessionHub.setQuality(next.fps, next.quality, next.scale)
+        toast("Slow link — switched to ${next.fps} fps, quality ${next.quality}. Change it in ⋯ → Quality.")
     }
 
     private fun toggleSecondScreen() {
@@ -609,6 +815,9 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
+        // Frames were paused while we were away; ask for them again.
+        SessionHub.setVisible(true)
         if (SessionHub.isLive) {
             showRemote()
             SessionHub.lastStats?.let { onStats(it) }
@@ -617,6 +826,10 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     override fun onPause() {
         super.onPause()
+        resumed = false
+        // No point decoding or transferring frames nobody can see.
+        SessionHub.setVisible(false)
+        stopHealthCheck()
         if (::keySink.isInitialized) hideKeyboard()
     }
 
@@ -654,6 +867,10 @@ class MainActivity : Activity(), SessionHub.Listener {
     private companion object {
         const val SCAN_REQUEST = 42
         const val REQUEST_NOTIFICATIONS = 43
+        const val HEALTH_INTERVAL = 5_000L
+
+        /** At most one GitHub request every six hours unless asked explicitly. */
+        const val UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000L
 
         /** Everything the picker can put in the toolbar. Names match the host. */
         val KEY_CATALOG = listOf(

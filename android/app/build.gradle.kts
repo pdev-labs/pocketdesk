@@ -26,6 +26,10 @@ android {
                 storePassword = System.getenv("POCKETDESK_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("POCKETDESK_KEY_ALIAS")
                 keyPassword = System.getenv("POCKETDESK_KEY_PASSWORD")
+                // The release key is a PKCS12 bundle; the same password protects
+                // the store and the key (it is generated with openssl, so no JDK
+                // is needed to create or rotate it).
+                storeType = "PKCS12"
             }
         }
     }

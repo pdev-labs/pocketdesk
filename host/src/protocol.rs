@@ -53,6 +53,11 @@ pub enum ClientMsg {
         #[serde(default)]
         height: Option<u32>,
     },
+    /// Stop sending frames to this client (app in the background). The socket,
+    /// stats and pings stay up, so resuming is instant.
+    Pause,
+    /// Resume frames after [`Pause`]; the latest frame is sent immediately.
+    Resume,
     /// Keep-alive probe; answered with `{"t":"pong"}`.
     Ping,
 }

@@ -70,7 +70,10 @@ impl Input {
             ClientMsg::Ping => Ok(()),
             // Handled by the server before input injection: they change the
             // stream, not the desktop.
-            ClientMsg::SetQuality { .. } | ClientMsg::SetDisplay { .. } => Ok(()),
+            ClientMsg::SetQuality { .. }
+            | ClientMsg::SetDisplay { .. }
+            | ClientMsg::Pause
+            | ClientMsg::Resume => Ok(()),
         }
     }
 }

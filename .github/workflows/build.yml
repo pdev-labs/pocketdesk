@@ -34,26 +34,61 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/pocketdesk.p12"
+            {
+              echo "POCKETDESK_KEYSTORE=$RUNNER_TEMP/pocketdesk.p12"
+              echo "POCKETDESK_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "POCKETDESK_KEY_ALIAS=$KEY_ALIAS"
+              echo "POCKETDESK_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "Release keystore ready."
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — falling back to the debug key."
+          fi
+
       - name: Build APKs
         working-directory: android
         run: |
           version_name="${GITHUB_REF_NAME#v}"
-          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then version_name="0.1.0-dev"; fi
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then version_name="dev-${GITHUB_RUN_NUMBER}"; fi
           gradle --no-daemon assembleDebug assembleRelease \
             -PpocketdeskVersionName="${version_name}" \
             -PpocketdeskVersionCode="${GITHUB_RUN_NUMBER}"
+
+      - name: Verify release signature
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | tee certs.txt
+          if ! grep -q "CN=PocketDesk" certs.txt; then
+            echo "::error::Release APK is not signed with the PocketDesk update key."
+            exit 1
+          fi
+          # Updates only install if the certificate is identical, so publish the
+          # digest next to the APK for people who verify by hand.
+          grep "SHA-256 digest" certs.txt | head -1 | sed 's/.*: //' > android-cert-sha256.txt
 
       - name: Collect APKs
         run: |
           mkdir -p out
           cp android/app/build/outputs/apk/debug/app-debug.apk out/pocketdesk-debug.apk
           cp android/app/build/outputs/apk/release/app-release.apk out/pocketdesk.apk
+          if [ -f android-cert-sha256.txt ]; then cp android-cert-sha256.txt out/; fi
           ls -lh out
 
       - uses: actions/upload-artifact@v4
         with:
           name: pocketdesk-android
-          path: out/*.apk
+          path: out/*
           if-no-files-found: error
 
   host:
@@ -126,9 +161,16 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Checksums
+      - name: Checksums and update manifest
         run: |
           cd dist
+          # In-app updates read this; it is public, so it carries no secrets.
+          apk_sha=$(sha256sum pocketdesk.apk | cut -d' ' -f1)
+          apk_size=$(stat -c%s pocketdesk.apk)
+          version="${GITHUB_REF_NAME#v}"
+          printf '{"version":"%s","versionCode":%s,"apk":"pocketdesk.apk","size":%s,"sha256":"%s"}\n' \
+            "$version" "${GITHUB_RUN_NUMBER}" "$apk_size" "$apk_sha" > latest.json
+          cat latest.json
           sha256sum ./* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 

@@ -172,6 +172,13 @@ fn token_matches(expected: &str, candidate: &str) -> bool {
     expected.as_bytes().ct_eq(candidate.as_bytes()).into()
 }
 
+/// What a client message asked the session loop to do.
+enum Outcome {
+    Reply(Option<String>),
+    Pause,
+    Resume,
+}
+
 async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     state.clients.fetch_add(1, Ordering::Relaxed);
     let mut frames = state.frames.subscribe();
@@ -221,12 +228,38 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     let mut bytes_sent: u64 = 0;
     let mut last_size = (0u32, 0u32);
     let mut window_start = Instant::now();
+    // Frames are only sent to a client that is looking at them; duplicate
+    // frames are already suppressed by the capture thread.
+    let mut streaming = true;
+
+    // A phone that connects while the screen is idle would otherwise wait for
+    // the next change. Send whatever we have right now.
+    let current = state
+        .last_frame
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    if let Some(frame) = current {
+        let msg = serde_json::json!({"t":"size","w":frame.w,"h":frame.h});
+        if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
+            state.clients.fetch_sub(1, Ordering::Relaxed);
+            return;
+        }
+        if socket.send(Message::Binary(frame.jpeg.clone())).await.is_err() {
+            state.clients.fetch_sub(1, Ordering::Relaxed);
+            return;
+        }
+        last_size = (frame.w, frame.h);
+    }
 
     loop {
         tokio::select! {
             received = frames.recv() => {
                 match received {
                     Ok(frame) => {
+                        if !streaming {
+                            continue;
+                        }
                         if (frame.w, frame.h) != last_size {
                             last_size = (frame.w, frame.h);
                             let msg = serde_json::json!({"t":"size","w":frame.w,"h":frame.h});
@@ -251,12 +284,44 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
                         match handle_text(&state, &text).await {
-                            Ok(Some(reply)) => {
+                            Ok(Outcome::Reply(Some(reply))) => {
                                 if socket.send(Message::Text(reply.into())).await.is_err() {
                                     break;
                                 }
                             }
-                            Ok(None) => {}
+                            Ok(Outcome::Reply(None)) => {}
+                            Ok(Outcome::Pause) => {
+                                tracing::debug!("client paused its stream");
+                                streaming = false;
+                            }
+                            Ok(Outcome::Resume) => {
+                                streaming = true;
+                                let current = state
+                                    .last_frame
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .clone();
+                                if let Some(frame) = current {
+                                    let size = serde_json::json!({
+                                        "t": "size", "w": frame.w, "h": frame.h
+                                    });
+                                    if socket
+                                        .send(Message::Text(size.to_string().into()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
+                                    if socket
+                                        .send(Message::Binary(frame.jpeg.clone()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
+                                    last_size = (frame.w, frame.h);
+                                }
+                            }
                             Err(reply) => {
                                 let msg = serde_json::json!({"t":"error","msg":reply});
                                 if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
@@ -308,13 +373,17 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     }
 }
 
-/// Returns `Ok(Some(reply))` to send a reply, `Err(message)` when the client
-/// should be told what went wrong.
-async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>, String> {
+/// Returns an [`Outcome`] for the session loop, or `Err(message)` when the
+/// client should be told what went wrong.
+async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Outcome, String> {
     let msg: ClientMsg = serde_json::from_str(text).map_err(|e| format!("bad message: {e}"))?;
 
     match msg {
-        ClientMsg::Ping => return Ok(Some("{\"t\":\"pong\"}".to_string())),
+        ClientMsg::Ping => {
+            return Ok(Outcome::Reply(Some("{\"t\":\"pong\"}".to_string())))
+        }
+        ClientMsg::Pause => return Ok(Outcome::Pause),
+        ClientMsg::Resume => return Ok(Outcome::Resume),
 
         // Stream settings are not input: they work in read-only mode too.
         ClientMsg::SetQuality {
@@ -341,7 +410,7 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>
                 applied.quality,
                 applied.scale
             );
-            return Ok(Some(capture_state_json(state)));
+            return Ok(Outcome::Reply(Some(capture_state_json(state))));
         }
 
         ClientMsg::SetDisplay {
@@ -355,7 +424,7 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>
             })
             .await
             .map_err(|e| format!("display change failed: {e}"))??;
-            return Ok(Some(reply));
+            return Ok(Outcome::Reply(Some(reply)));
         }
 
         _ => {}
@@ -383,7 +452,7 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>
     device
         .apply(&msg, &geometry)
         .map_err(|e| format!("{e:#}"))?;
-    Ok(None)
+    Ok(Outcome::Reply(None))
 }
 
 fn is_extended(state: &AppState) -> bool {

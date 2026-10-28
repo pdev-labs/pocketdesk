@@ -51,6 +51,8 @@ pub struct AppState {
     pub base_output: Option<String>,
     /// The headless output, when the phone asked for a second screen.
     pub second_screen: Arc<Mutex<Option<second_screen::VirtualDisplay>>>,
+    /// Most recent captured frame, for late joiners and resumed sessions.
+    pub last_frame: capture::SharedFrame,
 }
 
 #[tokio::main]
@@ -92,11 +94,13 @@ async fn main() -> Result<()> {
     let plan = capture::CapturePlan {
         backend: capture::resolve(cfg.capture),
     };
+    let last_frame: capture::SharedFrame = Arc::new(Mutex::new(None));
     let capture_info = capture::spawn(
         plan,
         settings.clone(),
         frames.clone(),
         fps_x10.clone(),
+        last_frame.clone(),
     )?;
 
     let (input, input_error) = if cfg.read_only {
@@ -133,6 +137,7 @@ async fn main() -> Result<()> {
         settings: settings.clone(),
         base_output: cfg.output.clone(),
         second_screen: Arc::new(Mutex::new(None)),
+        last_frame,
     });
 
     // `--extend 1600x900`: start with a virtual monitor instead of mirroring.

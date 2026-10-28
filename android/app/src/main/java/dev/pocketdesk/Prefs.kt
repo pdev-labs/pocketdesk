@@ -87,6 +87,13 @@ class Prefs(context: Context) {
             store.edit().putFloat("scale", value).apply()
         }
 
+    /** When the app last asked GitHub for a new release (epoch millis). */
+    var lastUpdateCheck: Long
+        get() = store.getLong("last_update_check", 0L)
+        set(value) {
+            store.edit().putLong("last_update_check", value).apply()
+        }
+
     fun saveStream(fps: Int, quality: Int, scale: Double) {
         store.edit()
             .putInt("fps", fps)

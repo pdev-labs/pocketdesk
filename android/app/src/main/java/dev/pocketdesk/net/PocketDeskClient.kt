@@ -71,6 +71,23 @@ class PocketDeskClient(private val listener: Listener) {
     private val pendingFrame = AtomicReference<ByteArray?>(null)
     private val decoding = AtomicBoolean(false)
 
+    /**
+     * When the app is in the background the host pauses the stream, so there is
+     * nothing to decode. The last raw frame is kept, so returning to the app
+     * paints immediately instead of waiting for the next change.
+     */
+    @Volatile
+    private var decodeEnabled = true
+
+    /**
+     * Three buffers rotated per frame. Reusing them keeps ~4.6 MB per frame out
+     * of the GC, and three slots guarantee we never decode into a bitmap the
+     * view may still be drawing.
+     */
+    private val ring = arrayOfNulls<Bitmap>(3)
+    private var ringIndex = 0
+    private val decodeOptions = BitmapFactory.Options().apply { inMutable = true }
+
     @Volatile
     private var socket: WebSocket? = null
 
@@ -83,6 +100,7 @@ class PocketDeskClient(private val listener: Listener) {
         socket = http.newWebSocket(request, object : WebSocketListener() {
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                if (!decodeEnabled) return
                 queueFrame(bytes.toByteArray())
             }
 
@@ -105,6 +123,12 @@ class PocketDeskClient(private val listener: Listener) {
     }
 
     fun send(payload: String): Boolean = socket?.send(payload) ?: false
+
+    /** Stop decoding while the app is not on screen; no allocations, no GC. */
+    fun setDecodeEnabled(enabled: Boolean) {
+        decodeEnabled = enabled
+        if (enabled) scheduleDecode()
+    }
 
     fun close() {
         closed = true
@@ -173,22 +197,45 @@ class PocketDeskClient(private val listener: Listener) {
     }
 
     private fun scheduleDecode() {
+        if (!decodeEnabled) return
         if (!decoding.compareAndSet(false, true)) return
         decoder.execute {
             try {
                 while (true) {
+                    if (!decodeEnabled) break
                     val bytes = pendingFrame.getAndSet(null) ?: break
-                    val bitmap = try {
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    } catch (t: Throwable) {
-                        null
-                    }
-                    if (bitmap != null) post { listener.onFrame(bitmap) }
+                    val bitmap = decode(bytes) ?: continue
+                    post { listener.onFrame(bitmap) }
                 }
             } finally {
                 decoding.set(false)
-                if (pendingFrame.get() != null) scheduleDecode()
+                if (decodeEnabled && pendingFrame.get() != null) scheduleDecode()
             }
         }
+    }
+
+    private fun decode(bytes: ByteArray): Bitmap? {
+        val slot = ringIndex
+        decodeOptions.inBitmap = ring[slot]?.takeIf { it.isMutable && !it.isRecycled }
+
+        val bitmap = try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
+        } catch (t: Throwable) {
+            // A different frame size (rotation, quality change) invalidates the
+            // reusable buffer: decode once more without it.
+            decodeOptions.inBitmap = null
+            try {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
+            } catch (t2: Throwable) {
+                null
+            }
+        }
+
+        decodeOptions.inBitmap = null
+        if (bitmap != null) {
+            ring[slot] = bitmap
+            ringIndex = (slot + 1) % ring.size
+        }
+        return bitmap
     }
 }
