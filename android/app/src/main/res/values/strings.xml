@@ -51,6 +51,10 @@
     <string name="speed_normal">Normal</string>
     <string name="speed_fast">Fast</string>
 
+    <string name="menu_scroll_natural">Scroll: natural</string>
+    <string name="menu_scroll_traditional">Scroll: traditional</string>
+    <string name="scroll_natural_hint">Natural scrolling: content follows your fingers.</string>
+    <string name="scroll_traditional_hint">Traditional scrolling: content moves opposite your fingers.</string>
     <string name="menu_audio_machine">Audio: this machine</string>
     <string name="menu_audio_phone">Audio: phone</string>
     <string name="audio_title">Audio output</string>

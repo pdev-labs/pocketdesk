@@ -631,6 +631,10 @@ class MainActivity : Activity(), SessionHub.Listener {
                 else R.string.menu_input_touch,
             ),
             getString(
+                if (prefs.naturalScroll) R.string.menu_scroll_natural
+                else R.string.menu_scroll_traditional,
+            ),
+            getString(
                 if (prefs.audioOnPhone) R.string.menu_audio_phone
                 else R.string.menu_audio_machine,
             ),
@@ -646,11 +650,12 @@ class MainActivity : Activity(), SessionHub.Listener {
                     0 -> pickKeys()
                     1 -> pickQuality()
                     2 -> pickInputMode()
-                    3 -> pickAudio()
-                    4 -> toggleSecondScreen()
-                    5 -> setToolbarHidden(true)
-                    6 -> toggleFill()
-                    7 -> maybeCheckForUpdates(force = true)
+                    3 -> toggleScroll()
+                    4 -> pickAudio()
+                    5 -> toggleSecondScreen()
+                    6 -> setToolbarHidden(true)
+                    7 -> toggleFill()
+                    8 -> maybeCheckForUpdates(force = true)
                 }
             }
             .show()
@@ -696,6 +701,15 @@ class MainActivity : Activity(), SessionHub.Listener {
             }
         }
         dialog.show()
+    }
+
+    private fun toggleScroll() {
+        prefs.naturalScroll = !prefs.naturalScroll
+        applyInputMode()
+        toast(
+            if (prefs.naturalScroll) getString(R.string.scroll_natural_hint)
+            else getString(R.string.scroll_traditional_hint),
+        )
     }
 
     private fun startAudio() {

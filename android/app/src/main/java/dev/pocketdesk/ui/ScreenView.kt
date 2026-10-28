@@ -216,7 +216,7 @@ class ScreenView @JvmOverloads constructor(
                     scrollAnchorX = x
 
                     val notch = 46f * density
-                    val dy = scrollAccumY / notch
+                    val dy = scrollAccumY / notch * if (naturalScroll) 1f else -1f
                     val dx = scrollAccumX / notch
                     if (abs(scrollAccumY) >= notch || abs(scrollAccumX) >= notch) {
                         onScroll?.invoke(dy, dx, false)
