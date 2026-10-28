@@ -54,6 +54,13 @@ class Prefs(context: Context) {
     val keyList: List<String>
         get() = keys.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
+    /** Crop the sides of the stream instead of letterboxing it. */
+    var fillScreen: Boolean
+        get() = store.getBoolean("fill_screen", false)
+        set(value) {
+            store.edit().putBoolean("fill_screen", value).apply()
+        }
+
     /** Toolbar collapsed, so the desktop gets the whole screen. */
     var toolbarHidden: Boolean
         get() = store.getBoolean("toolbar_hidden", false)

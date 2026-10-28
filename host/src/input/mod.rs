@@ -51,7 +51,10 @@ impl Input {
                 mods,
                 action,
             } => {
+                // `shift`, `ctrl`, … are valid key names too (the protocol
+                // documents `{"t":"key","name":"shift","action":"down"}`).
                 let code = keys::by_name(name)
+                    .or_else(|| keys::modifier(name))
                     .ok_or_else(|| anyhow::anyhow!("unknown key name `{name}`"))?;
                 let mods: Vec<u16> = mods.iter().filter_map(|m| keys::modifier(m)).collect();
                 match action.unwrap_or(KeyAction::Tap) {

@@ -181,6 +181,14 @@ jobs:
           body: |
             PocketDesk ${{ github.ref_name }}
 
+            **Input fixed** — the pointer never moved: the monitor bounding box came out
+            infinitely wide, so every touch mapped to (0,0) and the kernel dropped the
+            duplicate. Now fixed, with tests. Modifier keys (`shift` as a key, not just a
+            modifier) are accepted too.
+
+            **Fill screen** — mirroring can now crop the sides (⋯ → Fill screen) instead of
+            showing black bars; second-screen mode is unaffected.
+
             **Updates** — this release is the first signed with the permanent update key.
             Older installs were signed with a throwaway CI key, so **uninstall once** and
             install this APK by hand. After that, the app updates itself:

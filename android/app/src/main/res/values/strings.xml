@@ -60,6 +60,8 @@
     <string name="update_session_title">Update available</string>
     <string name="update_session_message">PocketDesk %1$s is ready to download. Installing it closes this remote session.</string>
     <string name="update_session_confirm">Stop session &amp; install</string>
+    <string name="menu_fill">Fill screen (crop sides)</string>
+    <string name="menu_fit">Fit screen (black bars)</string>
     <string name="menu_check_updates">Check for updates</string>
     <string name="second_screen_needs_host">The host could not create a virtual monitor. Second-screen mode needs Hyprland; mirroring still works.</string>
 

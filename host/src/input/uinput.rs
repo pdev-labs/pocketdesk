@@ -232,6 +232,11 @@ impl Device {
         if written < 0 {
             return Err(std::io::Error::last_os_error()).context("writing input event to uinput");
         }
+        if written as usize != bytes {
+            // Partial writes are silently dropped events otherwise.
+            bail!("short uinput write: {written} of {bytes} bytes");
+        }
+        tracing::trace!(fd = self.fd, events = events.len(), "uinput write");
         Ok(())
     }
 
@@ -242,6 +247,7 @@ impl Device {
     pub fn move_abs(&mut self, x: i32, y: i32) -> Result<()> {
         let x = x.clamp(0, ABS_MAX);
         let y = y.clamp(0, ABS_MAX);
+        tracing::debug!(fd = self.fd, "pointer -> {x},{y}");
         self.emit(&[
             event(EV_ABS, ABS_X, x),
             event(EV_ABS, ABS_Y, y),

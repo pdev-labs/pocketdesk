@@ -12,6 +12,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -30,6 +31,9 @@ class ScreenView @JvmOverloads constructor(
     var onScroll: ((Float, Float) -> Unit)? = null
 
     private var frame: Bitmap? = null
+
+    /** Fill crops the sides instead of showing black bars. */
+    private var fill = false
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
     private val destination = RectF()
     private val density = resources.displayMetrics.density
@@ -58,12 +62,27 @@ class ScreenView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun setFill(value: Boolean) {
+        if (fill == value) return
+        fill = value
+        invalidate()
+    }
+
+    val isFilling: Boolean
+        get() = fill
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val bitmap = frame ?: return
         if (bitmap.width <= 0 || bitmap.height <= 0 || width == 0 || height == 0) return
 
-        val scale = min(width.toFloat() / bitmap.width, height.toFloat() / bitmap.height)
+        val scale = if (fill) {
+            // Cover: the frame is scaled until it covers the view; the excess is
+            // cropped, and touch mapping already works against `destination`.
+            max(width.toFloat() / bitmap.width, height.toFloat() / bitmap.height)
+        } else {
+            min(width.toFloat() / bitmap.width, height.toFloat() / bitmap.height)
+        }
         val drawWidth = bitmap.width * scale
         val drawHeight = bitmap.height * scale
         val left = (width - drawWidth) / 2f

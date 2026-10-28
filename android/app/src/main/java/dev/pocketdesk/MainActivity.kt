@@ -81,6 +81,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     private val updater by lazy { Updater(this) }
     private var pendingUpdate: UpdateInfo? = null
     private var pendingApk: File? = null
+    private var awaitingExtend = false
 
     private var readOnly = false
     private var backgroundHintShown = false
@@ -153,6 +154,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         keySink.onText = { text -> send(RemoteInput.text(text)) }
         keySink.onKeyName = { name -> sendKey(name) }
 
+        screenView.setFill(prefs.fillScreen)
         buildToolbar()
         applyToolbarVisibility()
         SessionHub.addListener(this)
@@ -297,6 +299,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             }
             if (prefs.secondScreen) {
                 val (w, h) = phoneTarget()
+                awaitingExtend = true
                 SessionHub.setDisplay("extend", w, h)
             }
         }
@@ -324,10 +327,14 @@ class MainActivity : Activity(), SessionHub.Listener {
         if (state.mode == "extend" && state.width > 0 && previous?.mode != "extend") {
             toast(getString(R.string.second_screen_ready, state.width, state.height))
         }
-        if (state.mode == "mirror" && previous?.mode == "extend" && prefs.secondScreen) {
-            // The host dropped the virtual monitor (for example after a restart).
-            prefs.secondScreen = false
-            toast(getString(R.string.mirroring_again))
+        if (awaitingExtend) {
+            awaitingExtend = false
+            if (state.mode != "extend") {
+                // We asked for a virtual monitor and the host stayed on mirror
+                // (no Hyprland, or the request failed): do not keep asking.
+                prefs.secondScreen = false
+                toast(getString(R.string.second_screen_needs_host))
+            }
         }
     }
 
@@ -597,6 +604,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             getString(R.string.menu_quality),
             if (prefs.secondScreen) getString(R.string.menu_mirror) else getString(R.string.menu_extend),
             getString(R.string.menu_hide_toolbar),
+            if (prefs.fillScreen) getString(R.string.menu_fit) else getString(R.string.menu_fill),
             getString(R.string.menu_check_updates),
         )
 
@@ -607,7 +615,8 @@ class MainActivity : Activity(), SessionHub.Listener {
                     1 -> pickQuality()
                     2 -> toggleSecondScreen()
                     3 -> setToolbarHidden(true)
-                    4 -> maybeCheckForUpdates(force = true)
+                    4 -> toggleFill()
+                    5 -> maybeCheckForUpdates(force = true)
                 }
             }
             .show()
@@ -703,7 +712,9 @@ class MainActivity : Activity(), SessionHub.Listener {
         val current = prefs.quality.takeIf { it > 0 } ?: captureState?.quality ?: 65
         val index = PRESETS.indexOfFirst { it.quality == current }
         val next = when {
-            index < 0 -> null
+            // The host can start at any quality (75 by default), which matches no
+            // preset. Step down relative to what it is sending.
+            index < 0 -> if (current > 50) PRESETS[1] else PRESETS[0]
             PRESETS[index].fps >= 25 -> PRESETS[1]   // smooth -> balanced
             index == 2 -> PRESETS[1]                 // sharp  -> balanced
             index == 1 -> PRESETS[0]                 // balanced -> low data
@@ -712,6 +723,15 @@ class MainActivity : Activity(), SessionHub.Listener {
 
         SessionHub.setQuality(next.fps, next.quality, next.scale)
         toast("Slow link — switched to ${next.fps} fps, quality ${next.quality}. Change it in ⋯ → Quality.")
+    }
+
+    private fun toggleFill() {
+        prefs.fillScreen = !prefs.fillScreen
+        screenView.setFill(prefs.fillScreen)
+        toast(
+            if (prefs.fillScreen) "Fill: sides cropped, no black bars."
+            else "Fit: whole screen visible, with black bars.",
+        )
     }
 
     private fun toggleSecondScreen() {
@@ -724,6 +744,7 @@ class MainActivity : Activity(), SessionHub.Listener {
 
         val (width, height) = phoneTarget()
         prefs.secondScreen = true
+        awaitingExtend = true
         SessionHub.setDisplay("extend", width, height)
         toast(getString(R.string.second_screen_asking, width, height))
     }
