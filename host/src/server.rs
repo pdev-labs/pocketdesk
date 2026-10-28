@@ -142,7 +142,8 @@ async fn upgrade(
     match authorize(&state, token, peer) {
         Err(response) => response,
         Ok(()) => {
-            tracing::info!(%peer, "client connected");
+            let transport = if peer.ip().is_loopback() { "USB" } else { "LAN" };
+            tracing::info!(%peer, "client connected over {transport}");
             ws.on_upgrade(move |socket| session(socket, state))
         }
     }

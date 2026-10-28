@@ -64,6 +64,8 @@ class MainActivity : Activity(), SessionHub.Listener {
     private lateinit var connectButton: Button
     private lateinit var scanButton: Button
     private lateinit var rememberBox: CheckBox
+    private lateinit var usbBox: CheckBox
+    private lateinit var usbHint: TextView
     private lateinit var statusText: TextView
     private lateinit var recentRow: View
     private lateinit var recentHost: TextView
@@ -127,6 +129,8 @@ class MainActivity : Activity(), SessionHub.Listener {
         connectButton = findViewById(R.id.connectButton)
         scanButton = findViewById(R.id.scanButton)
         rememberBox = findViewById(R.id.rememberBox)
+        usbBox = findViewById(R.id.usbBox)
+        usbHint = findViewById(R.id.usbHint)
         statusText = findViewById(R.id.statusText)
         recentRow = findViewById(R.id.recentRow)
         recentHost = findViewById(R.id.recentHost)
@@ -144,11 +148,15 @@ class MainActivity : Activity(), SessionHub.Listener {
         updateAction = findViewById(R.id.updateAction)
         updateLater = findViewById(R.id.updateLater)
 
-        hostField.setText(prefs.host)
+        hostField.setText(prefs.wifiHost.ifBlank { prefs.host })
         portField.setText(prefs.port.toString())
         tokenField.setText(prefs.token)
         rememberBox.isChecked = prefs.remember
         rememberBox.setOnCheckedChangeListener { _, checked -> prefs.remember = checked }
+
+        usbBox.isChecked = prefs.usbCable
+        setUsbMode(prefs.usbCable, applyPreset = false)
+        usbBox.setOnCheckedChangeListener { _, checked -> setUsbMode(checked, applyPreset = true) }
         updateRecent()
 
         scanButton.setOnClickListener {
@@ -186,10 +194,14 @@ class MainActivity : Activity(), SessionHub.Listener {
     // ── connecting ────────────────────────────────────────────────────
 
     private fun connect(deviceName: String = "") {
-        val host = hostField.text.toString().trim().ifBlank { "127.0.0.1" }
+        val fieldHost = hostField.text.toString().trim()
+        val usb = prefs.usbCable
+        val host = if (usb) "127.0.0.1" else fieldHost.ifBlank { "127.0.0.1" }
         val port = portField.text.toString().trim().toIntOrNull()?.takeIf { it in 1..65535 }
             ?: Prefs.DEFAULT_PORT
         val token = tokenField.text.toString().trim()
+
+        if (!usb && host != "127.0.0.1") prefs.wifiHost = host
 
         if (token.length < 4) {
             statusText.text = "Scan the QR code, or type the 8-character code from the host."
@@ -213,9 +225,44 @@ class MainActivity : Activity(), SessionHub.Listener {
         RemoteService.start(this)
     }
 
+    /**
+     * USB mode connects to the host through `adb reverse`, so the address is
+     * always localhost; the saved Wi-Fi address is kept separately.
+     */
+    private fun setUsbMode(enabled: Boolean, applyPreset: Boolean) {
+        if (enabled) {
+            val typed = hostField.text.toString().trim()
+            if (typed.isNotEmpty() && typed != "127.0.0.1") prefs.wifiHost = typed
+        }
+
+        prefs.usbCable = enabled
+        usbHint.visibility = if (enabled) View.VISIBLE else View.GONE
+        hostField.isEnabled = !enabled
+        if (enabled) {
+            hostField.setText("127.0.0.1")
+        } else {
+            val lan = prefs.wifiHost.ifBlank { prefs.host }
+            hostField.setText(if (lan == "127.0.0.1") "" else lan)
+        }
+
+        if (!applyPreset) return
+        if (enabled) {
+            prefs.saveStream(30, 90, 1.0)
+            if (SessionHub.isLive) SessionHub.setQuality(30, 90, 1.0)
+            toast(getString(R.string.usb_quality))
+        } else if (prefs.fps == 30 && prefs.quality == 90) {
+            // Only step down if the cable preset is what is active.
+            prefs.saveStream(15, 65, 1.0)
+            if (SessionHub.isLive) SessionHub.setQuality(15, 65, 1.0)
+        }
+    }
+
     private fun useSaved() {
         if (!prefs.hasSaved) return
-        hostField.setText(prefs.host)
+        hostField.setText(
+            if (prefs.usbCable) "127.0.0.1"
+            else prefs.wifiHost.ifBlank { prefs.host },
+        )
         portField.setText(prefs.port.toString())
         tokenField.setText(prefs.token)
         connect(prefs.name)
@@ -237,7 +284,8 @@ class MainActivity : Activity(), SessionHub.Listener {
         }
         recentRow.visibility = View.VISIBLE
         val label = prefs.name.ifBlank { prefs.host }
-        recentHost.text = "$label · ${prefs.host}:${prefs.port}"
+        val shownHost = prefs.wifiHost.ifBlank { prefs.host }
+        recentHost.text = "$label · $shownHost:${prefs.port}"
     }
 
     private fun requestNotificationPermission() {
@@ -335,7 +383,8 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     override fun onStats(stats: Stats) {
         val second = captureState?.mode == "extend" || prefs.secondScreen
-        val prefix = if (second) getString(R.string.mode_second_screen) + " · " else ""
+        val usb = if (prefs.usbCable) getString(R.string.mode_usb) + " · " else ""
+        val prefix = usb + if (second) getString(R.string.mode_second_screen) + " · " else ""
         statsText.text = if (readOnly) {
             String.format(Locale.US, "%sview only\n%.0f fps", prefix, stats.fps)
         } else {
@@ -949,7 +998,9 @@ class MainActivity : Activity(), SessionHub.Listener {
         val shortSide = minOf(bounds.width(), bounds.height()).toDouble()
         if (longSide <= 0.0 || shortSide <= 0.0) return 1600 to 900
 
-        val factor = (1600.0 / longSide).coerceAtMost(1.0)
+        // USB carries far more than Wi-Fi, so the virtual monitor gets more pixels.
+        val targetLongEdge = if (prefs.usbCable) 2400.0 else 1600.0
+        val factor = (targetLongEdge / longSide).coerceAtMost(1.0)
         val width = (((longSide * factor).toInt()) / 2) * 2
         val height = (((shortSide * factor).toInt()) / 2) * 2
         return width.coerceAtLeast(640) to height.coerceAtLeast(360)
@@ -1063,7 +1114,8 @@ class MainActivity : Activity(), SessionHub.Listener {
         val token = uri.getQueryParameter("t") ?: uri.getQueryParameter("token") ?: return
         val name = uri.getQueryParameter("n") ?: uri.getQueryParameter("name").orEmpty()
 
-        hostField.setText(host)
+        if (host != "127.0.0.1") prefs.wifiHost = host
+        if (!prefs.usbCable) hostField.setText(host)
         portField.setText(port.toString())
         tokenField.setText(token)
 
@@ -1126,6 +1178,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             Preset("Balanced · 15 fps · q65", 15, 65, 1.0),
             Preset("Sharp · 20 fps · q82", 20, 82, 1.0),
             Preset("Smooth · 30 fps · q60", 30, 60, 1.0),
+            Preset("Cable · 30 fps · q90", 30, 90, 1.0),
         )
     }
 }

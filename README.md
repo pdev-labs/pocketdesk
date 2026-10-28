@@ -17,7 +17,7 @@
 | Piece | State |
 | --- | --- |
 | Linux host (Hyprland/Sway/grim, X11/ffmpeg) | **Working** — screen, pointer, keyboard |
-| Android client | **Working** — stream, direct touch or touchpad gestures, keyboard, QR pairing, background session, quality presets, second screen, phone audio, in-app updates |
+| Android client | **Working** — stream over Wi-Fi or USB cable, direct touch or touchpad gestures, keyboard, QR pairing, background session, quality presets, second screen, phone audio, in-app updates |
 | Windows host | Preview — screen via `gdigrab`, input not implemented yet |
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
 | Clipboard, file transfer | Roadmap |
@@ -77,6 +77,36 @@ sudo ./setup-linux-input.sh    # creates /dev/uinput access for your user
 ```
 
 Without it the host still streams and the app shows **view only** with the reason on screen.
+
+## USB cable mode
+
+Wi-Fi is convenient, but the cable is faster and does not compete with anything
+else on the network. PocketDesk supports both, chosen with a checkbox on the
+connect screen:
+
+1. Enable **USB debugging** on the phone and plug it into the computer.
+2. Start the host. It automatically runs `adb reverse tcp:8765 tcp:8765` for
+   every attached device and prints:
+   `usb      127.0.0.1:8765 over adb reverse (1 device)`.
+3. In the app tick **USB cable (fast)**. The host field switches to `127.0.0.1`
+   and the app talks to the host through the cable.
+4. The cable profile raises the stream to **30 fps · q90** and sizes a virtual
+   second monitor at 2400 px on the long edge (vs 1600 on Wi-Fi).
+
+The tunnel is re-applied every ten seconds, so unplugging and replugging is
+handled without restarting the host. Untick the box to go back to the saved
+Wi-Fi address; the two addresses are kept separately, so switching is one tap.
+
+Notes:
+
+* `adb` must be installed on the computer (`android-tools` on Arch,
+  `adb` on Debian/Ubuntu). The phone still needs USB debugging, exactly as for
+  `adb` itself. No root, no extra app.
+* The forwarded port is still protected by the pairing code; USB does not
+  disable authentication.
+* Prefer not to let the host touch adb? Start it with `--no-usb`.
+* USB tethering (the phone's network-sharing mode) also works: connect to the
+  host address shown on that interface and leave the cable box unticked.
 
 ## Runs in the background
 
@@ -279,6 +309,7 @@ pocketdesk --help
   --no-cursor          hide the cursor from the stream
   --no-qr              do not print the pairing QR in the terminal
   --extend <WxH>       start with a virtual monitor of this size (second screen, Hyprland)
+  --no-usb             do not configure adb reverse for USB-cable connections
   --read-only          stream only, never inject input
   --print-token        print the saved pairing code and exit
 ```

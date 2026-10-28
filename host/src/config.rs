@@ -84,6 +84,10 @@ pub struct Config {
     #[arg(long, value_parser = parse_size, value_name = "WxH")]
     pub extend: Option<(u32, u32)>,
 
+    /// Do not configure `adb reverse` for USB-cable connections.
+    #[arg(long)]
+    pub no_usb: bool,
+
     /// Show verbose logs.
     #[arg(long)]
     pub verbose: bool,
