@@ -3,9 +3,11 @@ package dev.pocketdesk.session
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import dev.pocketdesk.net.CaptureState
 import dev.pocketdesk.net.HelloInfo
 import dev.pocketdesk.net.PocketDeskClient
 import dev.pocketdesk.net.Stats
+import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -26,6 +28,7 @@ object SessionHub : PocketDeskClient.Listener {
         fun onFrame(bitmap: Bitmap) {}
         fun onStats(stats: Stats) {}
         fun onError(message: String) {}
+        fun onCapture(state: CaptureState) {}
     }
 
     private const val MAX_ATTEMPTS = 5
@@ -53,6 +56,10 @@ object SessionHub : PocketDeskClient.Listener {
     var lastStats: Stats? = null
         private set
 
+    /** Quality / second-screen state last reported by the host. */
+    var capture: CaptureState? = null
+        private set
+
     var readOnly = false
         private set
 
@@ -68,6 +75,7 @@ object SessionHub : PocketDeskClient.Listener {
         listener.onState(state, null)
         hello?.let(listener::onHello)
         latestFrame?.let(listener::onFrame)
+        capture?.let(listener::onCapture)
     }
 
     fun removeListener(listener: Listener) {
@@ -91,6 +99,33 @@ object SessionHub : PocketDeskClient.Listener {
         client?.send(payload)
     }
 
+    /** Stream settings are not input, so they also work in view-only mode. */
+    private fun sendAlways(payload: String) {
+        client?.send(payload)
+    }
+
+    /** Change fps/quality/scale live; the host clamps and confirms. */
+    fun setQuality(fps: Int? = null, quality: Int? = null, scale: Double? = null) {
+        val payload = JSONObject().put("t", "set_quality")
+        fps?.let { payload.put("fps", it) }
+        quality?.let { payload.put("quality", it) }
+        scale?.let { payload.put("scale", it) }
+        sendAlways(payload.toString())
+    }
+
+    /**
+     * `mode = "extend"` adds a virtual monitor sized to the phone and streams
+     * that instead of the physical screen; `"mirror"` goes back.
+     */
+    fun setDisplay(mode: String, width: Int, height: Int) {
+        val payload = JSONObject()
+            .put("t", "set_display")
+            .put("mode", mode)
+            .put("width", width)
+            .put("height", height)
+        sendAlways(payload.toString())
+    }
+
     fun stop(detail: String? = null) {
         stopped = true
         reconnect.removeCallbacksAndMessages(null)
@@ -100,6 +135,7 @@ object SessionHub : PocketDeskClient.Listener {
         hello = null
         latestFrame = null
         lastStats = null
+        capture = null
         readOnly = false
         publish(State.IDLE, detail)
     }
@@ -122,6 +158,11 @@ object SessionHub : PocketDeskClient.Listener {
     override fun onStats(stats: Stats) {
         lastStats = stats
         listeners.forEach { it.onStats(stats) }
+    }
+
+    override fun onCapture(state: CaptureState) {
+        capture = state
+        listeners.forEach { it.onCapture(state) }
     }
 
     override fun onError(message: String) {

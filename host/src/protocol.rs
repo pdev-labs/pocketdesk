@@ -33,6 +33,26 @@ pub enum ClientMsg {
     },
     /// Type a string using the US layout (shift is handled automatically).
     Text { s: String },
+    /// Reconfigure the stream live. Any subset may be sent; the host replies
+    /// with the settings it actually applied (they are clamped).
+    SetQuality {
+        #[serde(default)]
+        fps: Option<u32>,
+        #[serde(default)]
+        quality: Option<u8>,
+        #[serde(default)]
+        scale: Option<f64>,
+    },
+    /// `mode: "mirror"` streams the physical monitor; `mode: "extend"` creates
+    /// (or resizes) a virtual monitor of `width`x`height` and streams that, so
+    /// the phone is a second display rather than a copy.
+    SetDisplay {
+        mode: String,
+        #[serde(default)]
+        width: Option<u32>,
+        #[serde(default)]
+        height: Option<u32>,
+    },
     /// Keep-alive probe; answered with `{"t":"pong"}`.
     Ping,
 }

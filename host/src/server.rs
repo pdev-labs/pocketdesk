@@ -27,6 +27,7 @@ use tokio::sync::broadcast::error::RecvError;
 use crate::{
     config::normalize_token,
     protocol::ClientMsg,
+    second_screen,
     AppState,
 };
 
@@ -46,6 +47,16 @@ async fn index(State(state): State<Arc<AppState>>) -> Html<String> {
         .read()
         .map(|g| g.source.clone())
         .unwrap_or_else(|_| "unknown".to_string());
+    let settings = state
+        .settings
+        .read()
+        .map(|s| s.clone())
+        .unwrap_or_else(|e| e.into_inner().clone());
+    let mode = if is_extended(&state) {
+        "second screen"
+    } else {
+        "mirror"
+    };
 
     Html(format!(
         r#"<!doctype html>
@@ -72,7 +83,9 @@ code {{ background:#0b0c0f; padding:2px 6px; border-radius:6px; color:#8ea1ff; }
   <h1><span class="dot"></span>PocketDesk is running</h1>
   <p class="sub">Streaming {display} — v{version}</p>
   <div class="row"><span>Clients</span><span>{clients}</span></div>
+  <div class="row"><span>Mode</span><span>{mode}</span></div>
   <div class="row"><span>Capture rate</span><span>{fps:.1} fps</span></div>
+  <div class="row"><span>Quality</span><span>{quality} · {target_fps} fps target · {scale:.2}×</span></div>
   <div class="row"><span>Input</span><span>{input}</span></div>
   <div class="row"><span>Endpoint</span><span><code>/ws</code></span></div>
   <p class="sub" style="margin:24px 0 0">Open PocketDesk on your phone and scan the QR code
@@ -82,7 +95,11 @@ code {{ background:#0b0c0f; padding:2px 6px; border-radius:6px; color:#8ea1ff; }
         display = html_escape(&display),
         version = state.version,
         clients = clients,
+        mode = mode,
         fps = fps,
+        quality = settings.quality,
+        target_fps = settings.fps,
+        scale = settings.scale,
         input = if state.input.is_some() {
             "mouse + keyboard"
         } else if state.read_only {
@@ -159,14 +176,25 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     state.clients.fetch_add(1, Ordering::Relaxed);
     let mut frames = state.frames.subscribe();
 
+    let settings = state
+        .settings
+        .read()
+        .map(|s| s.clone())
+        .unwrap_or_else(|e| e.into_inner().clone());
+    let (width, height) = captured_size(&state);
+
     let hello = serde_json::json!({
         "t": "hello",
         "app": "pocketdesk",
         "version": state.version,
         "codec": "jpeg",
-        "fps": state.capture.fps,
-        "width": state.capture.width,
-        "height": state.capture.height,
+        "fps": settings.fps,
+        "quality": settings.quality,
+        "scale": settings.scale,
+        "mode": if is_extended(&state) { "extend" } else { "mirror" },
+        "width": width,
+        "height": height,
+        "presets": ["low", "balanced", "sharp", "smooth"],
         "input": state.input.is_some(),
         "input_error": state.input_error,
         "read_only": state.read_only,
@@ -271,8 +299,13 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    state.clients.fetch_sub(1, Ordering::Relaxed);
+    let remaining = state.clients.fetch_sub(1, Ordering::Relaxed).saturating_sub(1);
     tracing::info!("client disconnected");
+    if remaining == 0 {
+        // The phone that asked for a second screen went away: do not leave a
+        // phantom monitor behind.
+        release_second_screen(&state);
+    }
 }
 
 /// Returns `Ok(Some(reply))` to send a reply, `Err(message)` when the client
@@ -280,8 +313,52 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
 async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>, String> {
     let msg: ClientMsg = serde_json::from_str(text).map_err(|e| format!("bad message: {e}"))?;
 
-    if matches!(msg, ClientMsg::Ping) {
-        return Ok(Some("{\"t\":\"pong\"}".to_string()));
+    match msg {
+        ClientMsg::Ping => return Ok(Some("{\"t\":\"pong\"}".to_string())),
+
+        // Stream settings are not input: they work in read-only mode too.
+        ClientMsg::SetQuality {
+            fps,
+            quality,
+            scale,
+        } => {
+            {
+                let mut guard = state
+                    .settings
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
+                let current = guard.clone();
+                *guard = current.merge(fps, quality, scale);
+            }
+            let applied = state
+                .settings
+                .read()
+                .map(|s| s.clone())
+                .unwrap_or_else(|e| e.into_inner().clone());
+            tracing::info!(
+                "stream: {} fps · quality {} · scale {:.2}×",
+                applied.fps,
+                applied.quality,
+                applied.scale
+            );
+            return Ok(Some(capture_state_json(state)));
+        }
+
+        ClientMsg::SetDisplay {
+            mode,
+            width,
+            height,
+        } => {
+            let state = state.clone();
+            let reply = tokio::task::spawn_blocking(move || {
+                set_display(&state, &mode, width, height).map(|_| capture_state_json(&state))
+            })
+            .await
+            .map_err(|e| format!("display change failed: {e}"))??;
+            return Ok(Some(reply));
+        }
+
+        _ => {}
     }
 
     if state.read_only {
@@ -307,6 +384,144 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Option<String>
         .apply(&msg, &geometry)
         .map_err(|e| format!("{e:#}"))?;
     Ok(None)
+}
+
+fn is_extended(state: &AppState) -> bool {
+    state
+        .second_screen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+}
+
+fn captured_size(state: &AppState) -> (u32, u32) {
+    state
+        .geometry
+        .read()
+        .map(|g| (g.captured.w.round() as u32, g.captured.h.round() as u32))
+        .unwrap_or((0, 0))
+}
+
+fn capture_state_json(state: &AppState) -> String {
+    let settings = state
+        .settings
+        .read()
+        .map(|s| s.clone())
+        .unwrap_or_else(|e| e.into_inner().clone());
+    let (width, height) = captured_size(state);
+
+    serde_json::json!({
+        "t": "capture",
+        "fps": settings.fps,
+        "quality": settings.quality,
+        "scale": settings.scale,
+        "mode": if is_extended(state) { "extend" } else { "mirror" },
+        "width": width,
+        "height": height,
+        "output": settings.output,
+        "preset": settings.preset(),
+    })
+    .to_string()
+}
+
+/// Mirror <-> second screen. Blocking: it talks to the compositor and waits for
+/// the output to appear.
+fn set_display(
+    state: &AppState,
+    mode: &str,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Result<(), String> {
+    match mode {
+        "extend" => {
+            let width = width.unwrap_or(1600);
+            let height = height.unwrap_or(900);
+
+            let mut guard = state
+                .second_screen
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+
+            let resize = match guard.as_ref() {
+                Some(existing) => existing.width != width || existing.height != height,
+                None => true,
+            };
+
+            if resize {
+                // A display created with --extend stays put when the phone leaves.
+                let on_demand = guard.as_ref().map(|d| d.on_demand).unwrap_or(true);
+                if let Some(mut old) = guard.take() {
+                    old.hide();
+                }
+                let display =
+                    second_screen::VirtualDisplay::create(width, height, on_demand)
+                        .map_err(|e| format!("{e:#}"))?;
+                *guard = Some(display);
+            }
+
+            {
+                let mut settings = state
+                    .settings
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
+                settings.output = Some(second_screen::OUTPUT_NAME.to_string());
+                // The virtual monitor is already phone-sized: do not downscale.
+                settings.scale = 1.0;
+            }
+            drop(guard);
+
+            crate::refresh_geometry(state);
+            Ok(())
+        }
+
+        _ => {
+            let mut guard = state
+                .second_screen
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            {
+                let mut settings = state
+                    .settings
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
+                settings.output = state.base_output.clone();
+            }
+            if let Some(mut display) = guard.take() {
+                display.hide();
+            }
+            drop(guard);
+
+            crate::refresh_geometry(state);
+            Ok(())
+        }
+    }
+}
+
+/// Called when the last client disconnects.
+fn release_second_screen(state: &AppState) {
+    let mut guard = state
+        .second_screen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+
+    let on_demand = guard.as_ref().map(|d| d.on_demand).unwrap_or(false);
+    if !on_demand {
+        return;
+    }
+
+    {
+        let mut settings = state
+            .settings
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        settings.output = state.base_output.clone();
+    }
+    if let Some(mut display) = guard.take() {
+        display.hide();
+    }
+    drop(guard);
+
+    crate::refresh_geometry(state);
 }
 
 #[cfg(test)]

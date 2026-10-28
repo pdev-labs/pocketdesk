@@ -2,10 +2,12 @@
 //!
 //! Every backend produces complete JPEG frames, which keeps the phone side
 //! simple (one decoder works everywhere) and avoids the licensing/bandwidth
-//! complexity of an H.264 pipeline in v0.1.
+//! complexity of an H.264 pipeline.
 //!
 //! A single capture thread feeds a broadcast channel, so five connected phones
-//! still cost exactly one screenshot per frame.
+//! still cost exactly one screenshot per frame. The thread watches
+//! [`CaptureSettings`]; changing fps/quality/scale/output from the phone tears
+//! down the backend and rebuilds it with the new arguments.
 
 pub mod ffmpeg;
 pub mod grim;
@@ -14,7 +16,7 @@ pub mod test_pattern;
 use std::{
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc,
+        Arc, RwLock,
     },
     time::{Duration, Instant},
 };
@@ -25,6 +27,63 @@ use tokio::sync::broadcast;
 
 use crate::config::{Backend, Config};
 
+/// Live, user-adjustable capture settings.
+///
+/// This is the single source of truth for "what the phone sees". The phone can
+/// change any field at any time; the capture thread notices the change on its
+/// next frame and rebuilds the backend.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CaptureSettings {
+    pub fps: u32,
+    pub quality: u8,
+    pub scale: f64,
+    /// Monitor to grab. `None` means "the focused monitor".
+    pub output: Option<String>,
+    pub cursor: bool,
+}
+
+impl CaptureSettings {
+    pub fn from_config(cfg: &Config) -> Self {
+        Self {
+            fps: cfg.fps.clamp(1, 60),
+            quality: cfg.quality.clamp(10, 95),
+            scale: cfg.scale.clamp(0.25, 1.0),
+            output: cfg.output.clone(),
+            cursor: !cfg.no_cursor,
+        }
+    }
+
+    /// Merge a partial update from a client, clamping everything to sane bounds.
+    pub fn merge(self, fps: Option<u32>, quality: Option<u8>, scale: Option<f64>) -> Self {
+        Self {
+            fps: fps.map(|value| value.clamp(1, 60)).unwrap_or(self.fps),
+            quality: quality
+                .map(|value| value.clamp(10, 95))
+                .unwrap_or(self.quality),
+            scale: scale
+                .map(|value| value.clamp(0.25, 1.0))
+                .unwrap_or(self.scale),
+            ..self
+        }
+    }
+
+    /// The preset name the phone shows next to the sliders.
+    pub fn preset(&self) -> &'static str {
+        match (self.fps, self.quality) {
+            (..=11, ..=50) => "low",
+            (20.., 78..) => "sharp",
+            (25.., ..) => "smooth",
+            _ => "balanced",
+        }
+    }
+}
+
+/// What backend to use. Everything else lives in [`CaptureSettings`].
+#[derive(Clone, Debug)]
+pub struct CapturePlan {
+    pub backend: Backend,
+}
+
 pub struct Frame {
     pub jpeg: Bytes,
     pub w: u32,
@@ -33,8 +92,6 @@ pub struct Frame {
 
 pub struct CaptureInfo {
     pub backend: &'static str,
-    pub fps: u32,
-    pub quality: u8,
     pub width: u32,
     pub height: u32,
 }
@@ -42,6 +99,7 @@ pub struct CaptureInfo {
 pub trait Capture: Send {
     fn next_frame(&mut self) -> Result<Frame>;
     /// Frame size before the first frame arrives, if the backend knows it.
+    #[allow(dead_code)]
     fn hint_size(&self) -> (u32, u32) {
         (0, 0)
     }
@@ -74,41 +132,51 @@ fn has_command(cmd: &str) -> bool {
         .is_ok()
 }
 
-pub fn spawn(cfg: &Config, tx: broadcast::Sender<Arc<Frame>>, fps_x10: Arc<AtomicU32>) -> Result<CaptureInfo> {
-    let backend = resolve(cfg.capture);
-
-    let (mut cap, name): (Box<dyn Capture>, &'static str) = match backend {
-        Backend::Grim => (Box::new(grim::Grim::new(cfg)?), "grim (wayland)"),
-        Backend::Ffmpeg => (Box::new(ffmpeg::Ffmpeg::new(cfg)?), "ffmpeg"),
-        Backend::Test => (Box::new(test_pattern::TestPattern::new(cfg)), "test pattern"),
+pub fn spawn(
+    plan: CapturePlan,
+    settings: Arc<RwLock<CaptureSettings>>,
+    tx: broadcast::Sender<Arc<Frame>>,
+    fps_x10: Arc<AtomicU32>,
+) -> Result<CaptureInfo> {
+    let backend_name = match plan.backend {
+        Backend::Grim => "grim (wayland)",
+        Backend::Ffmpeg => "ffmpeg",
+        Backend::Test => "test pattern",
         Backend::Auto => unreachable!("resolve() returns a concrete backend"),
     };
 
-    let (hint_w, hint_h) = cap.hint_size();
-    let fps = cfg.fps.clamp(1, 60);
-
     let info = CaptureInfo {
-        backend: name,
-        fps,
-        quality: cfg.quality,
-        width: hint_w,
-        height: hint_h,
+        backend: backend_name,
+        width: 0,
+        height: 0,
     };
 
     std::thread::Builder::new()
         .name("pocketdesk-capture".to_string())
-        .spawn(move || capture_loop(&mut *cap, tx, Duration::from_secs_f64(1.0 / fps as f64), fps_x10))
+        .spawn(move || capture_loop(plan, settings, tx, fps_x10))
         .map_err(|e| anyhow::anyhow!("spawning capture thread: {e}"))?;
 
     Ok(info)
 }
 
+fn make_capture(plan: &CapturePlan, settings: &CaptureSettings) -> Result<Box<dyn Capture>> {
+    match plan.backend {
+        Backend::Grim => Ok(Box::new(grim::Grim::new(settings)?)),
+        Backend::Ffmpeg => Ok(Box::new(ffmpeg::Ffmpeg::new(settings)?)),
+        Backend::Test => Ok(Box::new(test_pattern::TestPattern::new(settings))),
+        Backend::Auto => unreachable!("plan.backend is concrete"),
+    }
+}
+
 fn capture_loop(
-    cap: &mut dyn Capture,
+    plan: CapturePlan,
+    settings: Arc<RwLock<CaptureSettings>>,
     tx: broadcast::Sender<Arc<Frame>>,
-    budget: Duration,
     fps_x10: Arc<AtomicU32>,
 ) {
+    let mut backend: Option<Box<dyn Capture>> = None;
+    let mut applied: Option<CaptureSettings> = None;
+
     let mut window = Instant::now();
     let mut frames = 0u32;
 
@@ -118,12 +186,61 @@ fn capture_loop(
             fps_x10.store(0, Ordering::Relaxed);
             window = Instant::now();
             frames = 0;
+            // Drop the backend too: an ffmpeg child would keep encoding.
+            backend = None;
+            applied = None;
             std::thread::sleep(Duration::from_millis(150));
             continue;
         }
 
+        let current = settings
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+
+        if applied.as_ref() != Some(&current) {
+            // Drop the old backend first: for ffmpeg this kills the child process.
+            backend = None;
+            match make_capture(&plan, &current) {
+                Ok(fresh) => {
+                    if let Some(output) = &current.output {
+                        tracing::info!(
+                            "capture: {} · {output} · {} fps · quality {} · scale {:.2}×",
+                            match plan.backend {
+                                Backend::Grim => "grim",
+                                Backend::Ffmpeg => "ffmpeg",
+                                Backend::Test => "test pattern",
+                                Backend::Auto => "auto",
+                            },
+                            current.fps,
+                            current.quality,
+                            current.scale
+                        );
+                    } else {
+                        tracing::info!(
+                            "capture: {} fps · quality {} · scale {:.2}×",
+                            current.fps,
+                            current.quality,
+                            current.scale
+                        );
+                    }
+                    backend = Some(fresh);
+                    applied = Some(current.clone());
+                }
+                Err(err) => {
+                    tracing::warn!("cannot start capture: {err:#}");
+                    std::thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+            }
+        }
+
+        let Some(capture) = backend.as_mut() else {
+            continue;
+        };
+
         let started = Instant::now();
-        match cap.next_frame() {
+        match capture.next_frame() {
             Ok(frame) => {
                 frames += 1;
                 let _ = tx.send(Arc::new(frame));
@@ -135,6 +252,7 @@ fn capture_loop(
         }
 
         let elapsed = started.elapsed();
+        let budget = Duration::from_secs_f64(1.0 / current.fps as f64);
         if elapsed < budget {
             std::thread::sleep(budget - elapsed);
         }
@@ -333,5 +451,46 @@ mod tests {
         buffer.extend_from_slice(&full[split..]);
         drain_jpegs(&mut buffer, &latest);
         assert_eq!(latest.take(Duration::from_millis(10)).unwrap().w, 40);
+    }
+
+    fn settings(fps: u32, quality: u8, scale: f64) -> CaptureSettings {
+        CaptureSettings {
+            fps,
+            quality,
+            scale,
+            output: None,
+            cursor: true,
+        }
+    }
+
+    #[test]
+    fn settings_merge_and_clamp() {
+        let base = settings(15, 75, 1.0);
+        assert_eq!(
+            base.clone().merge(Some(0), Some(200), Some(9.0)),
+            settings(1, 95, 1.0)
+        );
+        assert_eq!(base.clone().merge(Some(24), None, None), settings(24, 75, 1.0));
+        assert_eq!(
+            base.clone().merge(None, Some(55), Some(0.6)),
+            settings(15, 55, 0.6)
+        );
+        // Output and cursor survive a quality change.
+        let with_output = CaptureSettings {
+            output: Some("pocketdesk-phone".into()),
+            cursor: false,
+            ..base.clone()
+        };
+        let merged = with_output.merge(None, Some(50), None);
+        assert_eq!(merged.output.as_deref(), Some("pocketdesk-phone"));
+        assert!(!merged.cursor);
+    }
+
+    #[test]
+    fn presets_round_trip() {
+        assert_eq!(settings(10, 45, 0.75).preset(), "low");
+        assert_eq!(settings(15, 65, 1.0).preset(), "balanced");
+        assert_eq!(settings(20, 82, 1.0).preset(), "sharp");
+        assert_eq!(settings(30, 60, 1.0).preset(), "smooth");
     }
 }

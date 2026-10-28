@@ -6,10 +6,7 @@
 use anyhow::Result;
 use jpeg_encoder::{ColorType, Encoder};
 
-use crate::{
-    capture::{jpeg_frame, Capture, Frame},
-    config::Config,
-};
+use crate::capture::{jpeg_frame, Capture, CaptureSettings, Frame};
 
 pub struct TestPattern {
     w: usize,
@@ -20,7 +17,7 @@ pub struct TestPattern {
 }
 
 impl TestPattern {
-    pub fn new(cfg: &Config) -> Self {
+    pub fn new(settings: &CaptureSettings) -> Self {
         let w = 1280usize;
         let h = 720usize;
         let mut base = vec![0u8; w * h * 3];
@@ -46,11 +43,19 @@ impl TestPattern {
             h,
             base,
             tick: 0,
-            quality: cfg.quality.clamp(1, 100),
+            quality: settings.quality,
         }
     }
 
-    fn paint_rect(rgb: &mut [u8], stride: usize, x0: usize, y0: usize, rw: usize, rh: usize, color: [u8; 3]) {
+    fn paint_rect(
+        rgb: &mut [u8],
+        stride: usize,
+        x0: usize,
+        y0: usize,
+        rw: usize,
+        rh: usize,
+        color: [u8; 3],
+    ) {
         for y in y0..(y0 + rh) {
             for x in x0..(x0 + rw) {
                 let i = (y * stride + x) * 3;

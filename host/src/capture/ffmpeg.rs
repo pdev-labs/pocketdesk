@@ -14,10 +14,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
-use crate::{
-    capture::{drain_jpegs, Capture, Frame, LatestFrame},
-    config::Config,
-};
+use crate::capture::{drain_jpegs, Capture, CaptureSettings, Frame, LatestFrame};
 
 pub struct Ffmpeg {
     child: Child,
@@ -26,10 +23,10 @@ pub struct Ffmpeg {
 }
 
 impl Ffmpeg {
-    pub fn new(cfg: &Config) -> Result<Self> {
+    pub fn new(settings: &CaptureSettings) -> Result<Self> {
         let mut command = Command::new("ffmpeg");
         command
-            .args(ffmpeg_args(cfg))
+            .args(ffmpeg_args(settings))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
@@ -97,10 +94,10 @@ impl Drop for Ffmpeg {
     }
 }
 
-fn ffmpeg_args(cfg: &Config) -> Vec<String> {
-    let fps = cfg.fps.clamp(1, 60).to_string();
-    let scale = cfg.scale.clamp(0.1, 4.0);
-    let q = quality_to_q(cfg.quality);
+fn ffmpeg_args(settings: &CaptureSettings) -> Vec<String> {
+    let fps = settings.fps.to_string();
+    let scale = settings.scale;
+    let q = quality_to_q(settings.quality);
 
     let mut args: Vec<String> = vec!["-hide_banner".into(), "-loglevel".into(), "error".into()];
     args.extend(platform_input(&fps));

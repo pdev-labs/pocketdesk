@@ -7,6 +7,7 @@ mod keys;
 mod layout;
 mod pairing;
 mod protocol;
+mod second_screen;
 mod server;
 mod throttle;
 
@@ -43,6 +44,13 @@ pub struct AppState {
     pub fps_x10: Arc<AtomicU32>,
     pub clients: Arc<AtomicU64>,
     pub throttle: Arc<throttle::Throttle>,
+    /// Live capture knobs (fps, quality, scale, monitor). The phone can change
+    /// any of them at any time.
+    pub settings: Arc<RwLock<capture::CaptureSettings>>,
+    /// Monitor to fall back to when a second screen is released.
+    pub base_output: Option<String>,
+    /// The headless output, when the phone asked for a second screen.
+    pub second_screen: Arc<Mutex<Option<second_screen::VirtualDisplay>>>,
 }
 
 #[tokio::main]
@@ -79,17 +87,17 @@ async fn main() -> Result<()> {
     // without ever queuing seconds of stale video.
     let fps_x10 = Arc::new(AtomicU32::new(cfg.fps.clamp(1, 60) * 10));
     let (frames, _) = tokio::sync::broadcast::channel(2);
-    let capture_info = capture::spawn(&cfg, frames.clone(), fps_x10.clone())?;
 
-    let geometry = match layout::detect(cfg.output.as_deref()) {
-        Ok(detected) => detected,
-        Err(err) => {
-            tracing::warn!("monitor layout unavailable ({err:#}); assuming one screen");
-            Geometry::fallback(1366.0, 768.0)
-        }
+    let settings = Arc::new(RwLock::new(capture::CaptureSettings::from_config(&cfg)));
+    let plan = capture::CapturePlan {
+        backend: capture::resolve(cfg.capture),
     };
-    tracing::debug!("layout: {geometry:?}");
-    let geometry = Arc::new(RwLock::new(geometry));
+    let capture_info = capture::spawn(
+        plan,
+        settings.clone(),
+        frames.clone(),
+        fps_x10.clone(),
+    )?;
 
     let (input, input_error) = if cfg.read_only {
         (None, None)
@@ -103,11 +111,18 @@ async fn main() -> Result<()> {
         }
     };
 
+    let geometry = layout::detect(cfg.output.as_deref())
+        .unwrap_or_else(|err| {
+            tracing::warn!("monitor layout unavailable ({err:#}); assuming one screen");
+            Geometry::fallback(1366.0, 768.0)
+        });
+    tracing::debug!("layout: {geometry:?}");
+
     let state = Arc::new(AppState {
         version: env!("CARGO_PKG_VERSION"),
         token: Arc::new(token.clone()),
         frames,
-        geometry: geometry.clone(),
+        geometry: Arc::new(RwLock::new(geometry)),
         input,
         input_error,
         read_only: cfg.read_only,
@@ -115,26 +130,37 @@ async fn main() -> Result<()> {
         fps_x10,
         clients: Arc::new(AtomicU64::new(0)),
         throttle: Arc::new(throttle::Throttle::new()),
+        settings: settings.clone(),
+        base_output: cfg.output.clone(),
+        second_screen: Arc::new(Mutex::new(None)),
     });
 
-    // Re-read the monitor layout now and then, so hot-plugging a screen or
-    // rotating the tablet does not desync the pointer mapping.
+    // `--extend 1600x900`: start with a virtual monitor instead of mirroring.
+    if let Some((width, height)) = cfg.extend {
+        match second_screen::VirtualDisplay::create(width, height, false) {
+            Ok(display) => {
+                let mut settings = settings.write().unwrap_or_else(|e| e.into_inner());
+                settings.output = Some(second_screen::OUTPUT_NAME.to_string());
+                settings.scale = 1.0;
+                drop(settings);
+                *state
+                    .second_screen
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(display);
+                refresh_geometry(&state);
+            }
+            Err(err) => tracing::warn!("--extend disabled: {err:#}"),
+        }
+    }
+
+    // Re-read the monitor layout now and then, so hot-plugging a screen, adding
+    // the virtual monitor or rotating the phone does not desync the pointer.
     {
         let state = state.clone();
-        let output = cfg.output.clone();
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(Duration::from_secs(20)).await;
-                if let Ok(fresh) = layout::detect(output.as_deref()) {
-                    let mut guard = state
-                        .geometry
-                        .write()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    if guard.captured != fresh.captured || guard.layout != fresh.layout {
-                        tracing::info!("monitor layout changed: {}", fresh.source);
-                        *guard = fresh;
-                    }
-                }
+                tokio::time::sleep(Duration::from_secs(4)).await;
+                refresh_geometry(&state);
             }
         });
     }
@@ -156,7 +182,41 @@ async fn main() -> Result<()> {
     })
     .await?;
 
+    // Removing the virtual output matters: leaving it behind would keep a
+    // phantom monitor in the desktop layout.
+    if let Some(mut display) = state
+        .second_screen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
+        display.hide();
+    }
+
     Ok(())
+}
+
+/// Re-read the monitor layout into `state.geometry`.
+pub fn refresh_geometry(state: &AppState) {
+    let output = state
+        .settings
+        .read()
+        .map(|s| s.output.clone())
+        .unwrap_or(None);
+
+    match layout::detect(output.as_deref()) {
+        Ok(fresh) => {
+            let mut guard = state
+                .geometry
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if guard.captured != fresh.captured || guard.layout != fresh.layout {
+                tracing::info!("monitor layout: {}", fresh.source);
+            }
+            *guard = fresh;
+        }
+        Err(err) => tracing::debug!("monitor layout unavailable: {err:#}"),
+    }
 }
 
 fn banner(cfg: &Config, state: &AppState, token: &str) {
@@ -168,11 +228,28 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
             .unwrap_or_else(|| "127.0.0.1".to_string())
     };
 
+    let settings = state
+        .settings
+        .read()
+        .map(|s| s.clone())
+        .unwrap_or_else(|e| e.into_inner().clone());
+
     let display = state
         .geometry
         .read()
         .map(|g| g.source.clone())
         .unwrap_or_else(|_| "unknown".to_string());
+
+    let mode = if state
+        .second_screen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+    {
+        "second screen (virtual monitor)"
+    } else {
+        "mirror"
+    };
 
     let input = match (&state.input, &state.input_error) {
         (Some(_), _) => "enabled (uinput virtual pointer + keyboard)".to_string(),
@@ -186,8 +263,12 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
     println!();
     println!("  PocketDesk {}", state.version);
     println!("  ─────────────────────────────────────────────");
-    println!("  stream   {} · {} fps · quality {}", state.capture.backend, state.capture.fps, state.capture.quality);
+    println!(
+        "  stream   {} · {} fps · quality {}",
+        state.capture.backend, settings.fps, settings.quality
+    );
     println!("  display  {display}");
+    println!("  mode     {mode}");
     println!("  server   http://{address}:{}", cfg.port);
     println!("  code     {}", config::pretty_token(token));
     println!("  input    {input}");
@@ -215,7 +296,7 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
     }
 
     println!("  Phone app → scan the QR, or enter {address}:{} and the code above.", cfg.port);
-    println!("  The app remembers this machine unless you untick \"Remember this device\".");
+    println!("  In the app: ⋯ for quality, keys and \"Use phone as second screen\".");
     println!("  Stay on your LAN, or reach it from anywhere over Tailscale/WireGuard.");
     println!();
 }

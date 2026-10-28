@@ -68,6 +68,9 @@ impl Input {
             }
             ClientMsg::Text { s } => self.dev.type_text(s),
             ClientMsg::Ping => Ok(()),
+            // Handled by the server before input injection: they change the
+            // stream, not the desktop.
+            ClientMsg::SetQuality { .. } | ClientMsg::SetDisplay { .. } => Ok(()),
         }
     }
 }

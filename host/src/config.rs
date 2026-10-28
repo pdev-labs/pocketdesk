@@ -78,6 +78,12 @@ pub struct Config {
     #[arg(long)]
     pub no_qr: bool,
 
+    /// Create a virtual monitor of this size (e.g. `1600x900`) and stream it, so
+    /// the phone acts as a second screen instead of a copy of the desktop.
+    /// Hyprland only. The phone can turn this on later from its ⋯ menu.
+    #[arg(long, value_parser = parse_size, value_name = "WxH")]
+    pub extend: Option<(u32, u32)>,
+
     /// Show verbose logs.
     #[arg(long)]
     pub verbose: bool,
@@ -87,6 +93,26 @@ impl Config {
     pub fn addr(&self) -> String {
         format!("{}:{}", self.bind, self.port)
     }
+}
+
+/// `1600x900` -> `(1600, 900)`, with a range check so a typo cannot ask the
+/// compositor for a 1x1 or 99999x99999 monitor.
+fn parse_size(value: &str) -> Result<(u32, u32), String> {
+    let (w, h) = value
+        .split_once(['x', 'X'])
+        .ok_or_else(|| format!("expected WIDTHxHEIGHT, e.g. 1600x900 (got {value})"))?;
+    let w: u32 = w
+        .trim()
+        .parse()
+        .map_err(|_| format!("bad width: {w}"))?;
+    let h: u32 = h
+        .trim()
+        .parse()
+        .map_err(|_| format!("bad height: {h}"))?;
+    if !(320..=3840).contains(&w) || !(240..=2160).contains(&h) {
+        return Err("size out of range (320x240 … 3840x2160)".to_string());
+    }
+    Ok((w, h))
 }
 
 /// `$XDG_CONFIG_HOME/pocketdesk` or `~/.config/pocketdesk`.
@@ -244,5 +270,15 @@ mod tests {
         assert_eq!(pretty_token("K7M4QX2B"), "K7M4-QX2B");
         assert_eq!(pretty_token("k7m4-qx2b"), "K7M4-QX2B");
         assert_eq!(pretty_token(""), "");
+    }
+
+    #[test]
+    fn parses_extend_sizes() {
+        assert_eq!(parse_size("1600x900"), Ok((1600, 900)));
+        assert_eq!(parse_size("1920X1080"), Ok((1920, 1080)));
+        assert!(parse_size("1600").is_err());
+        assert!(parse_size("1600x0").is_err());
+        assert!(parse_size("99999x900").is_err());
+        assert!(parse_size("axb").is_err());
     }
 }

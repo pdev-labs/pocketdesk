@@ -26,6 +26,27 @@
     <string name="not_a_pocketdesk_code">That QR code is not a PocketDesk pairing code.</string>
     <string name="background_hint">Still connected in the background. Use the notification or Exit to stop.</string>
 
+    <string name="stream_now">Streaming at %1$d fps · quality %2$d</string>
+    <string name="mode_second_screen">2nd screen</string>
+
+    <string name="menu_keys">Choose keys…</string>
+    <string name="menu_quality">Quality &amp; frame rate…</string>
+    <string name="menu_extend">Use phone as a second screen</string>
+    <string name="menu_mirror">Back to mirroring</string>
+    <string name="menu_hide_toolbar">Hide toolbar (full screen)</string>
+    <string name="show_toolbar">Show toolbar</string>
+
+    <string name="pick_keys">Toolbar keys</string>
+    <string name="done">Done</string>
+    <string name="reset_default">Reset</string>
+
+    <string name="quality_title">Quality &amp; frame rate</string>
+
+    <string name="second_screen_ready">Second screen ready · %1$d×%2$d. Move a window to it with Super+Shift+arrow.</string>
+    <string name="second_screen_asking">Creating a %1$d×%2$d virtual monitor…</string>
+    <string name="mirroring_again">Mirroring the desktop again.</string>
+    <string name="second_screen_needs_host">The host could not create a virtual monitor. Second-screen mode needs Hyprland; mirroring still works.</string>
+
     <string name="notification_channel">Remote session</string>
     <string name="notification_channel_desc">Keeps the remote desktop connection alive when the app is in the background</string>
     <string name="notification_connecting">Connecting to %1$s…</string>

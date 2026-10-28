@@ -20,9 +20,22 @@ import java.util.concurrent.atomic.AtomicReference
 data class HelloInfo(
     val version: String,
     val fps: Int,
+    val quality: Int,
+    val mode: String,
     val input: Boolean,
     val readOnly: Boolean,
     val inputError: String?,
+)
+
+/** What the host is capturing right now (replies to quality/display changes). */
+data class CaptureState(
+    val fps: Int,
+    val quality: Int,
+    val scale: Double,
+    val mode: String,
+    val width: Int,
+    val height: Int,
+    val preset: String,
 )
 
 /** Throughput as measured by the host, not by the phone. */
@@ -41,6 +54,7 @@ class PocketDeskClient(private val listener: Listener) {
         fun onStats(stats: Stats)
         fun onError(message: String)
         fun onClosed(reason: String, httpCode: Int?)
+        fun onCapture(state: CaptureState) {}
     }
 
     private val http = OkHttpClient.Builder()
@@ -115,9 +129,25 @@ class PocketDeskClient(private val listener: Listener) {
                     HelloInfo(
                         version = json.optString("version"),
                         fps = json.optInt("fps", 15),
+                        quality = json.optInt("quality", 75),
+                        mode = json.optString("mode", "mirror"),
                         input = json.optBoolean("input", false),
                         readOnly = json.optBoolean("read_only", false),
                         inputError = if (json.isNull("input_error")) null else json.optString("input_error"),
+                    ),
+                )
+            }
+
+            "capture" -> post {
+                listener.onCapture(
+                    CaptureState(
+                        fps = json.optInt("fps", 15),
+                        quality = json.optInt("quality", 75),
+                        scale = json.optDouble("scale", 1.0),
+                        mode = json.optString("mode", "mirror"),
+                        width = json.optInt("width", 0),
+                        height = json.optInt("height", 0),
+                        preset = json.optString("preset", "balanced"),
                     ),
                 )
             }

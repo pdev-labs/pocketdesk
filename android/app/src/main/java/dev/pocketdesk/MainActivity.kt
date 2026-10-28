@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +25,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import dev.pocketdesk.net.CaptureState
 import dev.pocketdesk.net.HelloInfo
 import dev.pocketdesk.net.RemoteInput
 import dev.pocketdesk.net.Stats
@@ -35,6 +37,12 @@ import dev.pocketdesk.ui.ScreenView
 import java.util.Locale
 
 class MainActivity : Activity(), SessionHub.Listener {
+
+    /** One toolbar button: a modifier (latched) or a key (tapped once). */
+    private data class KeyDef(val name: String, val label: String, val modifier: Boolean = false)
+
+    /** A stream preset, applied on the host without restarting it. */
+    private data class Preset(val label: String, val fps: Int, val quality: Int, val scale: Double)
 
     private lateinit var prefs: Prefs
 
@@ -53,11 +61,15 @@ class MainActivity : Activity(), SessionHub.Listener {
     private lateinit var recentForget: TextView
     private lateinit var screenView: ScreenView
     private lateinit var keySink: KeySinkEditText
+    private lateinit var toolbar: View
+    private lateinit var toolbarHandle: TextView
     private lateinit var toolbarButtons: LinearLayout
     private lateinit var statsText: TextView
 
     private var readOnly = false
     private var backgroundHintShown = false
+    private var appliedForSession = false
+    private var captureState: CaptureState? = null
     private val mods = linkedSetOf<String>()
     private val modifierChips = HashMap<String, TextView>()
 
@@ -81,6 +93,8 @@ class MainActivity : Activity(), SessionHub.Listener {
         recentForget = findViewById(R.id.recentForget)
         screenView = findViewById(R.id.screenView)
         keySink = findViewById(R.id.keySink)
+        toolbar = findViewById(R.id.toolbar)
+        toolbarHandle = findViewById(R.id.toolbarHandle)
         toolbarButtons = findViewById(R.id.toolbarButtons)
         statsText = findViewById(R.id.statsText)
 
@@ -97,6 +111,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         connectButton.setOnClickListener { connect() }
         recentConnect.setOnClickListener { useSaved() }
         recentForget.setOnClickListener { forgetSaved() }
+        toolbarHandle.setOnClickListener { setToolbarHidden(false) }
 
         screenView.onMove = { x, y -> send(RemoteInput.move(x, y)) }
         screenView.onButton = { button, down -> send(RemoteInput.button(button, down)) }
@@ -107,6 +122,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         keySink.onKeyName = { name -> sendKey(name) }
 
         buildToolbar()
+        applyToolbarVisibility()
         SessionHub.addListener(this)
     }
 
@@ -132,6 +148,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         }
         updateRecent()
 
+        appliedForSession = false
         requestNotificationPermission()
         SessionHub.connect(host, port, token)
         // The foreground service keeps the process (and this session) alive when
@@ -179,6 +196,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     override fun onState(state: SessionHub.State, detail: String?) {
         when (state) {
             SessionHub.State.CONNECTING -> {
+                appliedForSession = false
                 connectButton.isEnabled = false
                 statusText.text = getString(R.string.notification_connecting, SessionHub.target)
             }
@@ -213,11 +231,38 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     override fun onHello(info: HelloInfo) {
         readOnly = info.readOnly || !info.input
+        captureState = CaptureState(
+            fps = info.fps,
+            quality = info.quality,
+            scale = 1.0,
+            mode = info.mode,
+            width = 0,
+            height = 0,
+            preset = "",
+        )
         showRemote()
-        statsText.text = if (readOnly) "view only" else "${info.fps} fps"
+        statsText.text = if (readOnly) "view only" else "${info.fps} fps · q${info.quality}"
 
         if (!info.input && !info.readOnly) {
             toast(info.inputError?.substringBefore('\n') ?: "Host is view-only")
+        }
+
+        // Re-apply this phone's choices once per connection. The host forgets
+        // them when it restarts, so sending them on every connect keeps the
+        // stream the way the user set it.
+        if (!appliedForSession) {
+            appliedForSession = true
+            if (prefs.quality > 0) {
+                SessionHub.setQuality(
+                    prefs.fps.takeIf { it > 0 },
+                    prefs.quality,
+                    prefs.scale.toDouble(),
+                )
+            }
+            if (prefs.secondScreen) {
+                val (w, h) = phoneTarget()
+                SessionHub.setDisplay("extend", w, h)
+            }
         }
     }
 
@@ -226,15 +271,36 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
 
     override fun onStats(stats: Stats) {
+        val second = captureState?.mode == "extend" || prefs.secondScreen
+        val prefix = if (second) getString(R.string.mode_second_screen) + " · " else ""
         statsText.text = if (readOnly) {
-            String.format(Locale.US, "view only\n%.0f fps", stats.fps)
+            String.format(Locale.US, "%sview only\n%.0f fps", prefix, stats.fps)
         } else {
-            String.format(Locale.US, "%.0f fps · %d kbps", stats.fps, stats.kbps)
+            String.format(Locale.US, "%s%.0f fps · %d kbps", prefix, stats.fps, stats.kbps)
+        }
+    }
+
+    override fun onCapture(state: CaptureState) {
+        val previous = captureState
+        captureState = state
+
+        if (state.mode == "extend" && state.width > 0 && previous?.mode != "extend") {
+            toast(getString(R.string.second_screen_ready, state.width, state.height))
+        }
+        if (state.mode == "mirror" && previous?.mode == "extend" && prefs.secondScreen) {
+            // The host dropped the virtual monitor (for example after a restart).
+            prefs.secondScreen = false
+            toast(getString(R.string.mirroring_again))
         }
     }
 
     override fun onError(message: String) {
         toast(message)
+        if (message.contains("virtual monitor", ignoreCase = true) ||
+            message.contains("second-screen", ignoreCase = true)
+        ) {
+            prefs.secondScreen = false
+        }
     }
 
     // ── switching screens ─────────────────────────────────────────────
@@ -246,6 +312,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
+        applyToolbarVisibility()
         hideSystemBars()
     }
 
@@ -258,6 +325,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         hideKeyboard()
         statusText.text = message
         connectButton.isEnabled = true
+        applyToolbarVisibility()
     }
 
     private fun hideSystemBars() {
@@ -315,6 +383,8 @@ class MainActivity : Activity(), SessionHub.Listener {
     private fun stopSession() {
         SessionHub.stop(getString(R.string.notification_stopped))
         RemoteService.stop(this)
+        appliedForSession = false
+        captureState = null
         showConnectPanel("Disconnected.")
     }
 
@@ -323,33 +393,21 @@ class MainActivity : Activity(), SessionHub.Listener {
     private fun buildToolbar() {
         toolbarButtons.removeAllViews()
         modifierChips.clear()
+        mods.clear()
 
         toolbarButtons.addView(chip("Keys") { toggleKeyboard() })
 
-        for ((name, label) in listOf(
-            "ctrl" to "Ctrl",
-            "alt" to "Alt",
-            "shift" to "Shift",
-            "super" to "Super",
-        )) {
-            val view = chip(label) { toggleModifier(name) }
-            modifierChips[name] = view
+        val selected = prefs.keyList.ifEmpty { DEFAULT_KEYS }
+        for (name in selected) {
+            val def = KEY_CATALOG.firstOrNull { it.name == name } ?: continue
+            val view = chip(def.label) {
+                if (def.modifier) toggleModifier(def.name) else sendKey(def.name)
+            }
+            if (def.modifier) modifierChips[def.name] = view
             toolbarButtons.addView(view)
         }
 
-        for ((name, label) in listOf(
-            "esc" to "Esc",
-            "tab" to "Tab",
-            "enter" to "Enter",
-            "backspace" to "Bksp",
-            "left" to "←",
-            "up" to "↑",
-            "down" to "↓",
-            "right" to "→",
-        )) {
-            toolbarButtons.addView(chip(label) { sendKey(name) })
-        }
-
+        toolbarButtons.addView(chip("⋯") { showSessionMenu() })
         toolbarButtons.addView(chip("Exit") { confirmStop() })
     }
 
@@ -372,6 +430,119 @@ class MainActivity : Activity(), SessionHub.Listener {
         params.marginEnd = dp(6)
         view.layoutParams = params
         return view
+    }
+
+    private fun applyToolbarVisibility() {
+        val remote = remotePanel.visibility == View.VISIBLE
+        val hidden = remote && prefs.toolbarHidden
+        toolbar.visibility = if (hidden) View.GONE else View.VISIBLE
+        toolbarHandle.visibility = if (hidden) View.VISIBLE else View.GONE
+    }
+
+    private fun setToolbarHidden(hidden: Boolean) {
+        prefs.toolbarHidden = hidden
+        applyToolbarVisibility()
+        if (hidden) toast("Toolbar hidden — tap ☰ to bring it back.")
+    }
+
+    private fun showSessionMenu() {
+        val items = arrayOf(
+            getString(R.string.menu_keys),
+            getString(R.string.menu_quality),
+            if (prefs.secondScreen) getString(R.string.menu_mirror) else getString(R.string.menu_extend),
+            getString(R.string.menu_hide_toolbar),
+        )
+
+        AlertDialog.Builder(this)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> pickKeys()
+                    1 -> pickQuality()
+                    2 -> toggleSecondScreen()
+                    3 -> setToolbarHidden(true)
+                }
+            }
+            .show()
+    }
+
+    private fun pickKeys() {
+        val selected = prefs.keyList.ifEmpty { DEFAULT_KEYS }.toMutableSet()
+        val labels = KEY_CATALOG.map { it.label }.toTypedArray()
+        val checked = KEY_CATALOG.map { it.name in selected }.toBooleanArray()
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pick_keys)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                val name = KEY_CATALOG[which].name
+                if (isChecked) selected.add(name) else selected.remove(name)
+            }
+            .setPositiveButton(R.string.done) { _, _ ->
+                prefs.keys = KEY_CATALOG.filter { it.name in selected }
+                    .joinToString(",") { it.name }
+                buildToolbar()
+            }
+            .setNeutralButton(R.string.reset_default) { _, _ ->
+                prefs.keys = DEFAULT_KEYS.joinToString(",")
+                buildToolbar()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun pickQuality() {
+        val current = captureState
+        val checked = PRESETS.indexOfFirst {
+            it.fps == current?.fps && it.quality == current?.quality
+        }.coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.quality_title)
+            .setSingleChoiceItems(PRESETS.map { it.label }.toTypedArray(), checked) { dialog, which ->
+                val preset = PRESETS[which]
+                prefs.saveStream(preset.fps, preset.quality, preset.scale)
+                SessionHub.setQuality(preset.fps, preset.quality, preset.scale)
+                toast(getString(R.string.stream_now, preset.fps, preset.quality))
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun toggleSecondScreen() {
+        if (prefs.secondScreen) {
+            prefs.secondScreen = false
+            SessionHub.setDisplay("mirror", 0, 0)
+            toast(getString(R.string.mirroring_again))
+            return
+        }
+
+        val (width, height) = phoneTarget()
+        prefs.secondScreen = true
+        SessionHub.setDisplay("extend", width, height)
+        toast(getString(R.string.second_screen_asking, width, height))
+    }
+
+    /**
+     * The virtual monitor's size: the phone's aspect ratio at 1600 px on the
+     * long edge, even numbers only. 1600x720 for a 20:9 display, which is
+     * ~1.4 MB/s at 15 fps — a comfortable fit for Wi-Fi.
+     */
+    private fun phoneTarget(): Pair<Int, Int> {
+        val bounds: Rect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            windowManager.currentWindowMetrics.bounds
+        } else {
+            val metrics = resources.displayMetrics
+            Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+        }
+
+        val longSide = maxOf(bounds.width(), bounds.height()).toDouble()
+        val shortSide = minOf(bounds.width(), bounds.height()).toDouble()
+        if (longSide <= 0.0 || shortSide <= 0.0) return 1600 to 900
+
+        val factor = (1600.0 / longSide).coerceAtMost(1.0)
+        val width = (((longSide * factor).toInt()) / 2) * 2
+        val height = (((shortSide * factor).toInt()) / 2) * 2
+        return width.coerceAtLeast(640) to height.coerceAtLeast(360)
     }
 
     private fun toggleModifier(name: String) {
@@ -483,5 +654,54 @@ class MainActivity : Activity(), SessionHub.Listener {
     private companion object {
         const val SCAN_REQUEST = 42
         const val REQUEST_NOTIFICATIONS = 43
+
+        /** Everything the picker can put in the toolbar. Names match the host. */
+        val KEY_CATALOG = listOf(
+            KeyDef("ctrl", "Ctrl", true),
+            KeyDef("alt", "Alt", true),
+            KeyDef("shift", "Shift", true),
+            KeyDef("super", "Super", true),
+            KeyDef("esc", "Esc"),
+            KeyDef("tab", "Tab"),
+            KeyDef("enter", "Enter"),
+            KeyDef("backspace", "Bksp"),
+            KeyDef("space", "Space"),
+            KeyDef("delete", "Del"),
+            KeyDef("insert", "Ins"),
+            KeyDef("home", "Home"),
+            KeyDef("end", "End"),
+            KeyDef("pageup", "PgUp"),
+            KeyDef("pagedown", "PgDn"),
+            KeyDef("left", "←"),
+            KeyDef("up", "↑"),
+            KeyDef("down", "↓"),
+            KeyDef("right", "→"),
+            KeyDef("printscreen", "PrtSc"),
+            KeyDef("f1", "F1"),
+            KeyDef("f2", "F2"),
+            KeyDef("f3", "F3"),
+            KeyDef("f4", "F4"),
+            KeyDef("f5", "F5"),
+            KeyDef("f6", "F6"),
+            KeyDef("f7", "F7"),
+            KeyDef("f8", "F8"),
+            KeyDef("f9", "F9"),
+            KeyDef("f10", "F10"),
+            KeyDef("f11", "F11"),
+            KeyDef("f12", "F12"),
+        )
+
+        val DEFAULT_KEYS = listOf(
+            "ctrl", "alt", "shift", "super",
+            "esc", "tab", "enter", "backspace",
+            "left", "up", "down", "right",
+        )
+
+        val PRESETS = listOf(
+            Preset("Low data · 10 fps · q45 · 0.75×", 10, 45, 0.75),
+            Preset("Balanced · 15 fps · q65", 15, 65, 1.0),
+            Preset("Sharp · 20 fps · q82", 20, 82, 1.0),
+            Preset("Smooth · 30 fps · q60", 30, 60, 1.0),
+        )
     }
 }

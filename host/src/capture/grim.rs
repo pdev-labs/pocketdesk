@@ -5,14 +5,14 @@
 //! 1366x768 panel a frame takes ~80 ms end to end, which comfortably drives
 //! 10-15 fps at ~1-2 Mbit/s.
 
-use std::{process::{Command, Stdio}, sync::Arc};
+use std::{
+    process::{Command, Stdio},
+    sync::Arc,
+};
 
 use anyhow::{bail, Context, Result};
 
-use crate::{
-    capture::{jpeg_frame, Capture, Frame},
-    config::Config,
-};
+use crate::capture::{jpeg_frame, Capture, CaptureSettings, Frame};
 
 pub struct Grim {
     output: Option<String>,
@@ -23,7 +23,7 @@ pub struct Grim {
 }
 
 impl Grim {
-    pub fn new(cfg: &Config) -> Result<Self> {
+    pub fn new(settings: &CaptureSettings) -> Result<Self> {
         let available = Command::new("grim")
             .arg("-h")
             .stdout(Stdio::null())
@@ -39,14 +39,14 @@ impl Grim {
         }
 
         Ok(Self {
-            output: cfg.output.clone(),
-            scale: if (cfg.scale - 1.0).abs() > 0.001 {
-                Some(cfg.scale.clamp(0.1, 4.0))
+            output: settings.output.clone(),
+            scale: if (settings.scale - 1.0).abs() > 0.001 {
+                Some(settings.scale)
             } else {
                 None
             },
-            quality: cfg.quality.clamp(1, 100),
-            cursor: !cfg.no_cursor,
+            quality: settings.quality,
+            cursor: settings.cursor,
             last: Arc::new(std::sync::Mutex::new((0, 0))),
         })
     }

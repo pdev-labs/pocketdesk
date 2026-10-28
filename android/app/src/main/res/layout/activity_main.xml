@@ -240,6 +240,7 @@
             android:contentDescription="@string/screen_desc" />
 
         <LinearLayout
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
@@ -284,6 +285,29 @@
             android:background="@null"
             android:importantForAutofill="no"
             android:inputType="textVisiblePassword|textNoSuggestions" />
+
+        <!-- Small tab that brings the toolbar back when it is hidden for a
+             full-screen view (see the ⋯ → Hide toolbar action). -->
+        <TextView
+            android:id="@+id/toolbarHandle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:alpha="0.75"
+            android:background="@drawable/bg_chip_dim"
+            android:clickable="true"
+            android:contentDescription="@string/show_toolbar"
+            android:focusable="false"
+            android:paddingStart="12dp"
+            android:paddingTop="7dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="7dp"
+            android:text="☰"
+            android:textColor="@color/text"
+            android:textSize="15sp"
+            android:visibility="gone" />
     </FrameLayout>
 
 </FrameLayout>

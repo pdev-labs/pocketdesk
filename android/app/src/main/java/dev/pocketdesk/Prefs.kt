@@ -44,6 +44,57 @@ class Prefs(context: Context) {
             store.edit().putBoolean("remember", value).apply()
         }
 
+    /** Comma-separated toolbar keys, in catalog order. Empty = defaults. */
+    var keys: String
+        get() = store.getString("keys", "") ?: ""
+        set(value) {
+            store.edit().putString("keys", value).apply()
+        }
+
+    val keyList: List<String>
+        get() = keys.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** Toolbar collapsed, so the desktop gets the whole screen. */
+    var toolbarHidden: Boolean
+        get() = store.getBoolean("toolbar_hidden", false)
+        set(value) {
+            store.edit().putBoolean("toolbar_hidden", value).apply()
+        }
+
+    /** Stream the phone as a second monitor instead of mirroring. */
+    var secondScreen: Boolean
+        get() = store.getBoolean("second_screen", false)
+        set(value) {
+            store.edit().putBoolean("second_screen", value).apply()
+        }
+
+    /** Last quality preset; `fps <= 0` means "use whatever the host chose". */
+    var fps: Int
+        get() = store.getInt("fps", 0)
+        set(value) {
+            store.edit().putInt("fps", value).apply()
+        }
+
+    var quality: Int
+        get() = store.getInt("quality", 0)
+        set(value) {
+            store.edit().putInt("quality", value).apply()
+        }
+
+    var scale: Float
+        get() = store.getFloat("scale", 1f)
+        set(value) {
+            store.edit().putFloat("scale", value).apply()
+        }
+
+    fun saveStream(fps: Int, quality: Int, scale: Double) {
+        store.edit()
+            .putInt("fps", fps)
+            .putInt("quality", quality)
+            .putFloat("scale", scale.toFloat())
+            .apply()
+    }
+
     val hasSaved: Boolean
         get() = host.isNotBlank() && token.isNotBlank()
 
