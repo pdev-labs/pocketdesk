@@ -41,6 +41,33 @@ It is *not* a password you should reuse elsewhere: rotating it is one command
 (delete the file, restart the host). Older 64-character tokens keep working,
 and the comparison accepts either form.
 
+## Release signing and in-app updates
+
+The APK is signed with one long-lived key (RSA 4096, self-signed, PKCS12). Android
+refuses to update an app with an APK signed by a different key, which is exactly the
+guarantee the updater relies on:
+
+```
+latest.json ──► SHA-256 of pocketdesk.apk
+     │
+     ├── download ──► hash matches?
+     └── signing certificate == installed app's certificate?  (refuse otherwise)
+                                   │
+                                   ▼
+                        Android package installer
+```
+
+* The key lives in GitHub repository secrets, never in the repository. A local copy with
+  its password is kept outside the tree; **losing it means existing installs can never be
+  updated** (they would have to be uninstalled).
+* CI runs `apksigner verify --print-certs` on every tag and publishes the digest, so the
+  same certificate can be checked by hand.
+* The update check is the only outbound request the app makes, and only to GitHub. It
+  downloads nothing unless a newer `versionCode` is published.
+* `latest.json` is public and carries no secrets — only a version, size and hash.
+* If the checksum or certificate does not match, the file is deleted and the installer is
+  never opened.
+
 ## What a stolen token grants
 
 * Viewing the screen (all windows, notifications, password managers left open).

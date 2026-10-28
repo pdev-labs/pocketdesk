@@ -68,6 +68,25 @@ and the phone shows what the host actually chose rather than what it asked for.
 Dropping the backend also kills the ffmpeg child, so nothing keeps encoding in the
 background.
 
+## Frame economy
+
+Three mechanisms keep an idle or background session nearly free:
+
+* **Duplicate suppression.** `grim`/ffmpeg output is deterministic, so the capture thread
+  compares each frame's bytes with the previous one and does not broadcast an identical
+  frame. `AppState.last_frame` holds the newest frame, which is sent to a new client right
+  after `hello` and on `resume`, so a static desktop never looks blank.
+* **Per-client pause.** The app sends `{"t":"pause"}` when it loses focus; the session
+  task keeps draining the broadcast channel but writes nothing. `stats` and pings continue,
+  so the connection stays warm. `{"t":"resume"}` re-sends the last frame immediately.
+* **Decode ring.** The phone alternates three mutable bitmaps (`inBitmap`) instead of
+  allocating a new ~4.6 MB bitmap per frame; three slots mean a bitmap is never reused
+  while the view could still be drawing it.
+
+The app also watches its own health: two consecutive 5-second windows where it renders
+less than 60% of the frames the host sent imply a slow link, and it drops one quality
+preset for the rest of the session.
+
 ## Second screen
 
 "Extend" is the same pipeline pointed at a different monitor.

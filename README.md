@@ -17,7 +17,7 @@
 | Piece | State |
 | --- | --- |
 | Linux host (Hyprland/Sway/grim, X11/ffmpeg) | **Working** — screen, pointer, keyboard |
-| Android client | **Working** — stream, touch pointer, keyboard, QR pairing, background session, quality presets, second screen |
+| Android client | **Working** — stream, touch pointer, keyboard, QR pairing, background session, quality presets, second screen, in-app updates |
 | Windows host | Preview — screen via `gdigrab`, input not implemented yet |
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
 | Clipboard, audio, file transfer | Roadmap |
@@ -87,6 +87,54 @@ The session lives in a foreground service, not in the screen you are looking at:
 * Tapping **Stop** asks *"Stop remote session?"* first; **Keep running** dismisses it. Nothing disconnects on a single accidental tap.
 * Reopen the app from the launcher and you are dropped straight back into the running session, with the last frame already on screen.
 * The in-app **Exit** chip asks the same confirmation.
+
+## Performance
+
+The stream is only as expensive as what actually changed:
+
+| Situation | Traffic |
+| --- | --- |
+| Static desktop (idle) | ~0.4 Mbit/s — byte-identical frames are not sent at all |
+| App in the background | 0 — the phone asks the host to pause frames |
+| Active desktop, 1600×720, q65, 15 fps | ~1.5 MB/s |
+| Active desktop, Low data preset | ~0.6 MB/s |
+
+* **Unchanged frames are dropped.** JPEG encoding is deterministic, so a still desktop
+  produces byte-identical frames; the capture thread compares and sends nothing. A late
+  joiner, or a phone returning from the background, gets the last frame immediately.
+* **Background = silent.** `{"t":"pause"}` stops frames for that client while the socket,
+  pings and stats stay up. Resume is a single message and the first frame follows at once.
+* **No allocation storm.** The phone rotates three reusable bitmaps instead of allocating
+  ~4.6 MB per decoded frame.
+* **Auto-quality.** If the phone draws less than 60% of what the host sends for two
+  consecutive 5-second windows, it steps down one preset (never twice, never saved) and
+  tells you in a toast. Static screens are excluded, so an idle desktop never triggers it.
+* **Pick a preset** in **⋯ → Quality & frame rate** — the host applies it without restarting.
+
+Measured on the reference laptop (Hyprland, 1366×768 panel, 1600×720 virtual monitor):
+`grim` needs 39–47 ms per frame with the cursor, so ~20 fps is the ceiling on this
+backend; the default 15 fps leaves headroom for encoding and Wi-Fi.
+
+## Updates
+
+The app updates itself from this repository's releases:
+
+**⋯ → Check for updates** (also checked quietly on launch, at most every 6 hours).
+
+1. Fetch `releases/latest/download/latest.json` — version, versionCode, size, SHA-256.
+2. Download `pocketdesk.apk` with a progress indicator.
+3. Verify the **SHA-256** and the **signing certificate** against the installed app.
+4. Hand the file to Android's installer (one confirmation tap).
+
+The certificate check is the real protection: an APK signed with any other key is
+refused before the installer opens, so a compromised download cannot replace the app.
+
+**One-time step for installs from v0.3.0 or older:** those builds were signed with a
+throwaway CI key, so install v0.4.0 by hand once (uninstall the old app first). From
+v0.4.0 on, every release installs over the previous one, keeping your saved machines.
+
+Release certificate (SHA-256):
+`A6:19:9D:C0:B7:5A:FD:BE:A0:46:D8:3D:00:12:54:35:DF:60:AB:95:1D:83:54:C3:CF:4C:4E:ED:D1:7B:B2:DA`
 
 ## Touch controls
 
@@ -196,7 +244,14 @@ Try `--capture test` to get a moving test pattern without touching your real scr
 Everything is built in GitHub Actions, so no local Android SDK or Rust toolchain is required:
 
 * `.github/workflows/build.yml` builds the APK (debug + release) and the host for Linux, Windows and macOS on every push.
-* Pushing a `v*` tag publishes a release with all artifacts and `SHA256SUMS.txt`.
+* Pushing a `v*` tag publishes a release with all artifacts, `SHA256SUMS.txt` and
+  `latest.json` (the update manifest the app reads).
+* Release APKs are signed with a persistent key stored in repository secrets
+  (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+  `ANDROID_KEY_PASSWORD`). CI verifies the certificate with `apksigner` on every tag,
+  so a missigned APK fails the build instead of shipping an uninstallable app.
+* No secrets → the build falls back to the debug key and the tag job fails the
+  certificate check. Fork PRs still build.
 
 Locally, if you do have the tools:
 

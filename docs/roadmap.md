@@ -31,7 +31,18 @@
   aspect ratio, captured with grim and removed when the phone leaves. Pointer input
   maps into that monitor like any other output.
 
-## v0.4 — lower bandwidth, real TLS
+## v0.4 — shipped
+
+* **Signed, self-updating APK** — one long-lived signing key, `apksigner` verification in
+  CI, `latest.json` per release, and an in-app updater that checks SHA-256 *and* the
+  signing certificate before handing the APK to Android.
+* **Frame economy** — byte-identical frames are not sent, the stream pauses while the app
+  is in the background, decoded bitmaps are reused, and quality steps down automatically
+  when the phone cannot keep up.
+* **Meaningful second screen** — virtual monitor from v0.3, plus the pointer mapping and
+  cleanup fixes that make it usable day to day.
+
+## v0.5 — lower bandwidth, real TLS
 
 * **H.264 via MediaCodec** — host-side `libx264` (or VAAPI/NVENC), phone-side hardware
   decoder, `codec: "h264"` in `hello`, automatic fallback to JPEG. Target: 1080p at ~3 Mbit/s.
