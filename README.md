@@ -174,9 +174,9 @@ pointer speed (slow / normal / fast). Every option is remembered.
 | Toolbar **Exit** | Stop the session (with confirmation) |
 | Back / swipe away | Keep the session running in the background |
 
-The stream is letterboxed to your monitor's aspect ratio; **⋯ → Fill screen** crops
-the sides instead so a 16:9 desktop fills a 20:9 phone. The app switches to landscape
-automatically.
+The stream can meet the phone in three ways (**⋯ → Screen size**): **Fit** letterboxes
+the whole desktop, **Fill** crops the sides while keeping proportions, and **Stretch**
+distorts it to fill the display exactly. The app switches to landscape automatically.
 
 ## Audio
 
@@ -205,8 +205,8 @@ The toolbar is yours. **⋯** in the toolbar opens the session menu:
   default set. The *Keys* (keyboard) and *Exit* buttons are always there.
 * **Input mode** — direct touch or touchpad gestures (see above).
 * **Audio output** — this machine or the phone (see above).
-* **Fill screen / Fit screen** — crop the sides of a mismatched aspect ratio, or show
-  the whole desktop with black bars.
+* **Screen size** — fit (black bars), fill (crop the sides) or stretch (fill exactly,
+  may distort) for a mismatched aspect ratio.
 * **Hide toolbar (full screen)** — the desktop gets the whole display. A small **☰**
   tab in the top-right corner brings it back; the setting survives restarts.
 

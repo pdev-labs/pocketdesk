@@ -172,7 +172,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         keySink.onText = { text -> send(RemoteInput.text(text)) }
         keySink.onKeyName = { name -> sendKey(name) }
 
-        screenView.setFill(prefs.fillScreen)
+        applyScreenMode()
         applyInputMode()
         buildToolbar()
         applyToolbarVisibility()
@@ -640,7 +640,13 @@ class MainActivity : Activity(), SessionHub.Listener {
             ),
             if (prefs.secondScreen) getString(R.string.menu_mirror) else getString(R.string.menu_extend),
             getString(R.string.menu_hide_toolbar),
-            if (prefs.fillScreen) getString(R.string.menu_fit) else getString(R.string.menu_fill),
+            getString(
+                when (prefs.screenMode) {
+                    "fill" -> R.string.menu_screen_fill
+                    "stretch" -> R.string.menu_screen_stretch
+                    else -> R.string.menu_screen_fit
+                },
+            ),
             getString(R.string.menu_check_updates),
         )
 
@@ -654,7 +660,7 @@ class MainActivity : Activity(), SessionHub.Listener {
                     4 -> pickAudio()
                     5 -> toggleSecondScreen()
                     6 -> setToolbarHidden(true)
-                    7 -> toggleFill()
+                    7 -> pickScreenMode()
                     8 -> maybeCheckForUpdates(force = true)
                 }
             }
@@ -922,13 +928,40 @@ class MainActivity : Activity(), SessionHub.Listener {
         toast("Slow link — switched to ${next.fps} fps, quality ${next.quality}. Change it in ⋯ → Quality.")
     }
 
-    private fun toggleFill() {
-        prefs.fillScreen = !prefs.fillScreen
-        screenView.setFill(prefs.fillScreen)
-        toast(
-            if (prefs.fillScreen) "Fill: sides cropped, no black bars."
-            else "Fit: whole screen visible, with black bars.",
+    private fun applyScreenMode() {
+        screenView.setDisplayMode(
+            when (prefs.screenMode) {
+                "fill" -> ScreenView.DisplayMode.FILL
+                "stretch" -> ScreenView.DisplayMode.STRETCH
+                else -> ScreenView.DisplayMode.FIT
+            },
         )
+    }
+
+    private fun pickScreenMode() {
+        val values = arrayOf("fit", "fill", "stretch")
+        val labels = arrayOf(
+            getString(R.string.screen_fit),
+            getString(R.string.screen_fill),
+            getString(R.string.screen_stretch),
+        )
+        val hints = arrayOf(
+            R.string.screen_fit_hint,
+            R.string.screen_fill_hint,
+            R.string.screen_stretch_hint,
+        )
+        val checked = values.indexOf(prefs.screenMode).coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.screen_mode_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                prefs.screenMode = values[which]
+                applyScreenMode()
+                toast(getString(hints[which]))
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun toggleSecondScreen() {

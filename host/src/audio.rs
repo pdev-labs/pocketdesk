@@ -118,6 +118,9 @@ pub async fn handle(mut socket: WebSocket, state: Arc<AppState>, mute_host: bool
             message = socket.recv() => {
                 match message {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break,
+                    // Switching back to "this machine" asks for an immediate
+                    // unmute instead of relying on the close handshake.
+                    Some(Ok(Message::Text(text))) if text.contains("\"stop\"") => break,
                     _ => {}
                 }
             }

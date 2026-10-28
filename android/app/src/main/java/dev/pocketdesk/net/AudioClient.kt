@@ -167,6 +167,9 @@ class AudioClient(
 
     fun close() {
         closed = true
+        // Tell the host before closing: it restores its own speakers as soon
+        // as this arrives, instead of waiting for TCP to notice the close.
+        socket?.send("{\"t\":\"stop\"}")
         socket?.close(1000, "session ended")
         socket = null
         stopTrack()

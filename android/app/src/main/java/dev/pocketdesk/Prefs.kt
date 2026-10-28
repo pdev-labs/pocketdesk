@@ -54,11 +54,19 @@ class Prefs(context: Context) {
     val keyList: List<String>
         get() = keys.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
-    /** Crop the sides of the stream instead of letterboxing it. */
-    var fillScreen: Boolean
-        get() = store.getBoolean("fill_screen", false)
+    /**
+     * How the frame meets the phone: `fit` (letterbox), `fill` (crop) or
+     * `stretch` (distort to the exact display). Older installs only had the
+     * `fill_screen` boolean; it is honoured until a mode is chosen.
+     */
+    var screenMode: String
+        get() {
+            val saved = store.getString("screen_mode", "") ?: ""
+            if (saved == "fit" || saved == "fill" || saved == "stretch") return saved
+            return if (store.getBoolean("fill_screen", false)) "fill" else "fit"
+        }
         set(value) {
-            store.edit().putBoolean("fill_screen", value).apply()
+            store.edit().putString("screen_mode", value).apply()
         }
 
     /** `touch` = tap where you look; `touchpad` = relative pointer + gestures. */
