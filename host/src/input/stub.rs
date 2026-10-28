@@ -16,7 +16,18 @@ impl Device {
         )
     }
 
+    pub fn new_relative() -> Result<Self> {
+        anyhow::bail!(
+            "touchpad input is not implemented on this platform yet \
+             (v0.1 supports Linux; Windows/macOS are next) — running in view-only mode"
+        )
+    }
+
     pub fn move_abs(&mut self, _x: i32, _y: i32) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn move_rel(&mut self, _dx: f32, _dy: f32) -> Result<()> {
         Ok(())
     }
 

@@ -26,6 +26,8 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import dev.pocketdesk.net.CaptureState
@@ -33,6 +35,7 @@ import dev.pocketdesk.net.HelloInfo
 import dev.pocketdesk.net.RemoteInput
 import dev.pocketdesk.net.Stats
 import dev.pocketdesk.service.RemoteService
+import dev.pocketdesk.session.AudioHub
 import dev.pocketdesk.session.SessionHub
 import dev.pocketdesk.ui.KeySinkEditText
 import dev.pocketdesk.ui.ScanActivity
@@ -82,6 +85,8 @@ class MainActivity : Activity(), SessionHub.Listener {
     private var pendingUpdate: UpdateInfo? = null
     private var pendingApk: File? = null
     private var awaitingExtend = false
+    private var audioPlaying = false
+    private var audioUnavailableShown = false
 
     private var readOnly = false
     private var backgroundHintShown = false
@@ -103,6 +108,16 @@ class MainActivity : Activity(), SessionHub.Listener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefs = Prefs(this)
+
+        AudioHub.ensure(this)
+        AudioHub.onState = { playing, detail ->
+            runOnUiThread {
+                audioPlaying = playing
+                if (!playing && detail != null) {
+                    toast(getString(R.string.audio_failed, detail))
+                }
+            }
+        }
 
         connectPanel = findViewById(R.id.connectScroll)
         remotePanel = findViewById(R.id.remotePanel)
@@ -147,14 +162,18 @@ class MainActivity : Activity(), SessionHub.Listener {
         updateLater.setOnClickListener { updateRow.visibility = View.GONE }
 
         screenView.onMove = { x, y -> send(RemoteInput.move(x, y)) }
-        screenView.onButton = { button, down -> send(RemoteInput.button(button, down)) }
-        screenView.onClick = { button -> send(RemoteInput.click(button)) }
-        screenView.onScroll = { dy, dx -> send(RemoteInput.scroll(dy, dx)) }
+        screenView.onMoveRel = { dx, dy -> send(RemoteInput.moveRel(dx, dy)) }
+        screenView.onButton = { button, down, pad ->
+            send(RemoteInput.button(button, down, pad))
+        }
+        screenView.onClick = { button, pad -> send(RemoteInput.click(button, pad)) }
+        screenView.onScroll = { dy, dx, pad -> send(RemoteInput.scroll(dy, dx, pad)) }
 
         keySink.onText = { text -> send(RemoteInput.text(text)) }
         keySink.onKeyName = { name -> sendKey(name) }
 
         screenView.setFill(prefs.fillScreen)
+        applyInputMode()
         buildToolbar()
         applyToolbarVisibility()
         SessionHub.addListener(this)
@@ -253,11 +272,13 @@ class MainActivity : Activity(), SessionHub.Listener {
 
             SessionHub.State.FAILED -> {
                 connectButton.isEnabled = true
+                stopAudio()
                 showConnectPanel(detail ?: "Disconnected.")
             }
 
             SessionHub.State.IDLE -> {
                 connectButton.isEnabled = true
+                stopAudio()
                 if (detail != null) {
                     showConnectPanel(detail)
                 } else if (remotePanel.visibility == View.VISIBLE) {
@@ -303,6 +324,8 @@ class MainActivity : Activity(), SessionHub.Listener {
                 SessionHub.setDisplay("extend", w, h)
             }
         }
+
+        if (prefs.audioOnPhone) startAudio()
     }
 
     override fun onFrame(bitmap: Bitmap) {
@@ -427,6 +450,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
 
     private fun stopSession() {
+        stopAudio()
         SessionHub.stop(getString(R.string.notification_stopped))
         RemoteService.stop(this)
         appliedForSession = false
@@ -602,6 +626,14 @@ class MainActivity : Activity(), SessionHub.Listener {
         val items = arrayOf(
             getString(R.string.menu_keys),
             getString(R.string.menu_quality),
+            getString(
+                if (prefs.inputMode == "touchpad") R.string.menu_input_touchpad
+                else R.string.menu_input_touch,
+            ),
+            getString(
+                if (prefs.audioOnPhone) R.string.menu_audio_phone
+                else R.string.menu_audio_machine,
+            ),
             if (prefs.secondScreen) getString(R.string.menu_mirror) else getString(R.string.menu_extend),
             getString(R.string.menu_hide_toolbar),
             if (prefs.fillScreen) getString(R.string.menu_fit) else getString(R.string.menu_fill),
@@ -613,12 +645,163 @@ class MainActivity : Activity(), SessionHub.Listener {
                 when (which) {
                     0 -> pickKeys()
                     1 -> pickQuality()
-                    2 -> toggleSecondScreen()
-                    3 -> setToolbarHidden(true)
-                    4 -> toggleFill()
-                    5 -> maybeCheckForUpdates(force = true)
+                    2 -> pickInputMode()
+                    3 -> pickAudio()
+                    4 -> toggleSecondScreen()
+                    5 -> setToolbarHidden(true)
+                    6 -> toggleFill()
+                    7 -> maybeCheckForUpdates(force = true)
                 }
             }
+            .show()
+    }
+
+    // ── input modes ───────────────────────────────────────────────────
+
+    private fun applyInputMode() {
+        val mode = if (prefs.inputMode == "touchpad") {
+            ScreenView.InputMode.TOUCHPAD
+        } else {
+            ScreenView.InputMode.TOUCH
+        }
+        screenView.setInputMode(mode)
+        screenView.setPadOptions(prefs.padSpeed, prefs.naturalScroll, prefs.tapToClick)
+    }
+
+    private fun pickInputMode() {
+        val modes = arrayOf(
+            getString(R.string.input_touch),
+            getString(R.string.input_touchpad),
+        )
+        val checked = if (prefs.inputMode == "touchpad") 1 else 0
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.input_mode_title)
+            .setSingleChoiceItems(modes, checked) { _, which ->
+                prefs.inputMode = if (which == 1) "touchpad" else "touch"
+                applyInputMode()
+                toast(
+                    if (which == 1) getString(R.string.touchpad_hint)
+                    else getString(R.string.touch_hint),
+                )
+            }
+            .setPositiveButton(R.string.done, null)
+            .setNeutralButton(R.string.touchpad_options, null)
+            .create()
+
+        dialog.setOnShowListener {
+            // Neutral is "options"; do not dismiss when it is used.
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                pickTouchpadOptions()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun startAudio() {
+        if (!SessionHub.isLive) return
+        val info = SessionHub.hello
+        if (info != null && !info.audio) {
+            if (!audioUnavailableShown) {
+                audioUnavailableShown = true
+                toast(getString(R.string.audio_failed, "the host has no parec/pulseaudio-utils"))
+            }
+            return
+        }
+        val url = SessionHub.audioUrl(prefs.muteHost) ?: return
+        AudioHub.start(this, url)
+    }
+
+    private fun stopAudio() {
+        AudioHub.stop()
+        audioPlaying = false
+    }
+
+    private fun pickAudio() {
+        val group = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+        }
+        val machine = RadioButton(this).apply {
+            text = getString(R.string.audio_machine)
+            isChecked = !prefs.audioOnPhone
+        }
+        val phone = RadioButton(this).apply {
+            text = getString(R.string.audio_phone)
+            isChecked = prefs.audioOnPhone
+        }
+        group.addView(machine)
+        group.addView(phone)
+
+        val mute = CheckBox(this).apply {
+            text = getString(R.string.option_mute_host)
+            isChecked = prefs.muteHost
+            isEnabled = phone.isChecked
+            setPadding(0, dp(8), 0, 0)
+        }
+        phone.setOnCheckedChangeListener { _, checked -> mute.isEnabled = checked }
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+            addView(group)
+            addView(mute)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.audio_title)
+            .setView(layout)
+            .setPositiveButton(R.string.done) { _, _ ->
+                prefs.audioOnPhone = phone.isChecked
+                prefs.muteHost = mute.isChecked
+                if (prefs.audioOnPhone) {
+                    startAudio()
+                    toast(getString(R.string.audio_hint))
+                } else {
+                    stopAudio()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun pickTouchpadOptions() {
+        val labels = arrayOf(
+            getString(R.string.option_tap_to_click),
+            getString(R.string.option_natural_scroll),
+        )
+        val checked = booleanArrayOf(prefs.tapToClick, prefs.naturalScroll)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.touchpad_options)
+            .setMultiChoiceItems(labels, checked) { _, which, value ->
+                when (which) {
+                    0 -> prefs.tapToClick = value
+                    1 -> prefs.naturalScroll = value
+                }
+                applyInputMode()
+            }
+            .setPositiveButton(R.string.done, null)
+            .setNeutralButton(R.string.pointer_speed) { _, _ -> pickPadSpeed() }
+            .show()
+    }
+
+    private fun pickPadSpeed() {
+        val labels = arrayOf(
+            getString(R.string.speed_slow),
+            getString(R.string.speed_normal),
+            getString(R.string.speed_fast),
+        )
+        val speeds = floatArrayOf(1.0f, 1.6f, 2.4f)
+        val checked = speeds.indexOfFirst { kotlin.math.abs(it - prefs.padSpeed) < 0.05f }
+            .coerceAtLeast(1)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pointer_speed)
+            .setSingleChoiceItems(labels, checked) { _, which ->
+                prefs.padSpeed = speeds[which]
+                applyInputMode()
+            }
+            .setPositiveButton(R.string.done, null)
             .show()
     }
 
@@ -856,6 +1039,9 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     override fun onDestroy() {
         SessionHub.removeListener(this)
+        // Audio is process-wide: if the session is still alive it keeps playing
+        // in the background. Only detach the UI callback.
+        AudioHub.onState = null
         super.onDestroy()
     }
 

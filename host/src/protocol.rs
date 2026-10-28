@@ -8,20 +8,32 @@ use serde::Deserialize;
 pub enum ClientMsg {
     /// Move the pointer. Coordinates are normalized inside the streamed frame.
     Move { x: f32, y: f32 },
+    /// Move the pointer a relative number of desktop pixels (touchpad mode).
+    MoveRel { dx: f32, dy: f32 },
     /// Press and release a button once, at the current pointer position.
     Click {
         #[serde(default)]
         button: Option<String>,
         #[serde(default)]
         count: Option<u8>,
+        /// Use the relative (touchpad) device instead of the absolute one.
+        #[serde(default)]
+        pad: bool,
     },
     /// Press or release a button without moving (used for drags).
-    Button { button: String, down: bool },
+    Button {
+        button: String,
+        down: bool,
+        #[serde(default)]
+        pad: bool,
+    },
     /// Scroll wheel. `dy` is in wheel notches; positive means "finger moved down".
     Scroll {
         #[serde(default)]
         dx: f32,
         dy: f32,
+        #[serde(default)]
+        pad: bool,
     },
     /// A single key. `mods` are held for the duration of the key.
     Key {
@@ -68,4 +80,48 @@ pub enum KeyAction {
     Tap,
     Down,
     Up,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_moves_parse() {
+        let msg: ClientMsg = serde_json::from_str(r#"{"t":"move_rel","dx":12.5,"dy":-3}"#)
+            .expect("move_rel");
+        match msg {
+            ClientMsg::MoveRel { dx, dy } => {
+                assert!((dx - 12.5).abs() < f32::EPSILON);
+                assert!((dy + 3.0).abs() < f32::EPSILON);
+            }
+            other => panic!("expected MoveRel, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn touchpad_buttons_carry_the_pad_flag() {
+        let msg: ClientMsg = serde_json::from_str(
+            r#"{"t":"button","button":"left","down":true,"pad":true}"#,
+        )
+        .expect("pad button");
+        match msg {
+            ClientMsg::Button { button, down, pad } => {
+                assert_eq!(button, "left");
+                assert!(down);
+                assert!(pad);
+            }
+            other => panic!("expected Button, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn older_clients_without_pad_default_to_the_absolute_pointer() {
+        let msg: ClientMsg =
+            serde_json::from_str(r#"{"t":"click","button":"right"}"#).expect("legacy click");
+        match msg {
+            ClientMsg::Click { pad, .. } => assert!(!pad),
+            other => panic!("expected Click, got {other:?}"),
+        }
+    }
 }

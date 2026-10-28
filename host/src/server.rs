@@ -36,6 +36,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/", get(index))
         .route("/healthz", get(|| async { "ok" }))
         .route("/ws", get(upgrade))
+        .route("/audio", get(audio_upgrade))
         .with_state(state)
 }
 
@@ -87,7 +88,8 @@ code {{ background:#0b0c0f; padding:2px 6px; border-radius:6px; color:#8ea1ff; }
   <div class="row"><span>Capture rate</span><span>{fps:.1} fps</span></div>
   <div class="row"><span>Quality</span><span>{quality} · {target_fps} fps target · {scale:.2}×</span></div>
   <div class="row"><span>Input</span><span>{input}</span></div>
-  <div class="row"><span>Endpoint</span><span><code>/ws</code></span></div>
+  <div class="row"><span>Audio</span><span>{audio}</span></div>
+  <div class="row"><span>Endpoints</span><span><code>/ws</code> · <code>/audio</code></span></div>
   <p class="sub" style="margin:24px 0 0">Open PocketDesk on your phone and scan the QR code
   printed in the host terminal — or type the short code shown there. The app can remember
   this machine so you only pair once.</p>
@@ -100,6 +102,11 @@ code {{ background:#0b0c0f; padding:2px 6px; border-radius:6px; color:#8ea1ff; }
         quality = settings.quality,
         target_fps = settings.fps,
         scale = settings.scale,
+        audio = if state.audio_clients.load(Ordering::Relaxed) > 0 {
+            "phone"
+        } else {
+            "this machine"
+        },
         input = if state.input.is_some() {
             "mouse + keyboard"
         } else if state.read_only {
@@ -132,32 +139,74 @@ async fn upgrade(
             .map(|value| value.to_string())
     });
 
+    match authorize(&state, token, peer) {
+        Err(response) => response,
+        Ok(()) => {
+            tracing::info!(%peer, "client connected");
+            ws.on_upgrade(move |socket| session(socket, state))
+        }
+    }
+}
+
+async fn audio_upgrade(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let token = query.get("token").cloned().or_else(|| {
+        headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .map(|value| value.to_string())
+    });
+    let mute = query
+        .get("mute")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    match authorize(&state, token, peer) {
+        Err(response) => response,
+        Ok(()) => {
+            tracing::info!(%peer, "audio client connected");
+            ws.on_upgrade(move |socket| crate::audio::handle(socket, state, mute))
+        }
+    }
+}
+
+/// Shared token check and brute-force throttle for both WebSocket routes.
+fn authorize(
+    state: &AppState,
+    token: Option<String>,
+    peer: SocketAddr,
+) -> Result<(), Response> {
     let ip = peer.ip();
     if let Err(remaining) = state.throttle.check(ip) {
         let seconds = remaining.as_secs().max(1);
         tracing::warn!(%peer, "rejected connection: locked out for another {seconds}s");
-        return (
+        return Err((
             StatusCode::TOO_MANY_REQUESTS,
             format!("too many wrong codes — retry in {seconds}s"),
         )
-            .into_response();
+            .into_response());
     }
 
     match token {
         Some(candidate) if token_matches(&state.token, &candidate) => {
             state.throttle.success(ip);
-            tracing::info!(%peer, "client connected");
-            ws.on_upgrade(move |socket| session(socket, state))
+            Ok(())
         }
         Some(_) => {
             state.throttle.fail(ip);
             tracing::warn!(%peer, "rejected connection: wrong code");
-            (StatusCode::UNAUTHORIZED, "wrong pairing code").into_response()
+            Err((StatusCode::UNAUTHORIZED, "wrong pairing code").into_response())
         }
         None => {
             state.throttle.fail(ip);
             tracing::warn!(%peer, "rejected connection: no code");
-            (StatusCode::UNAUTHORIZED, "missing pairing code").into_response()
+            Err((StatusCode::UNAUTHORIZED, "missing pairing code").into_response())
         }
     }
 }
@@ -205,6 +254,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
         "input": state.input.is_some(),
         "input_error": state.input_error,
         "read_only": state.read_only,
+        "audio": crate::audio::available(),
     });
 
     if socket

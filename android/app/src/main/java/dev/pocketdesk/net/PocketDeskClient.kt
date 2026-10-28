@@ -25,6 +25,7 @@ data class HelloInfo(
     val input: Boolean,
     val readOnly: Boolean,
     val inputError: String?,
+    val audio: Boolean,
 )
 
 /** What the host is capturing right now (replies to quality/display changes). */
@@ -158,6 +159,7 @@ class PocketDeskClient(private val listener: Listener) {
                         input = json.optBoolean("input", false),
                         readOnly = json.optBoolean("read_only", false),
                         inputError = if (json.isNull("input_error")) null else json.optString("input_error"),
+                        audio = json.optBoolean("audio", false),
                     ),
                 )
             }

@@ -139,8 +139,20 @@ object SessionHub : PocketDeskClient.Listener {
         sendAlways(payload.toString())
     }
 
+    /**
+     * Audio uses its own socket, so it can keep playing while the video stream
+     * is paused in the background. `muteHost` asks the host to silence its own
+     * speakers for the duration.
+     */
+    fun audioUrl(muteHost: Boolean): String? {
+        if (host.isBlank() || token.isBlank() || port == 0) return null
+        val mute = if (muteHost) 1 else 0
+        return "ws://$host:$port/audio?token=${URLEncoder.encode(token, "UTF-8")}&mute=$mute"
+    }
+
     fun stop(detail: String? = null) {
         stopped = true
+        AudioHub.stop()
         reconnect.removeCallbacksAndMessages(null)
         client?.close()
         client = null

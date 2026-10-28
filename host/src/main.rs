@@ -1,5 +1,6 @@
 //! PocketDesk — stream this machine's screen to your phone and drive it remotely.
 
+mod audio;
 mod capture;
 mod config;
 mod input;
@@ -15,7 +16,7 @@ use std::{
     io::IsTerminal,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicU32, AtomicU64},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize},
         Arc, Mutex, RwLock,
     },
     time::Duration,
@@ -43,6 +44,10 @@ pub struct AppState {
     pub capture: Arc<CaptureInfo>,
     pub fps_x10: Arc<AtomicU32>,
     pub clients: Arc<AtomicU64>,
+    /// Phones currently receiving audio (used to mute/unmute exactly once).
+    pub audio_clients: Arc<AtomicUsize>,
+    /// True while PocketDesk itself muted the default sink.
+    pub audio_muted: Arc<AtomicBool>,
     pub throttle: Arc<throttle::Throttle>,
     /// Live capture knobs (fps, quality, scale, monitor). The phone can change
     /// any of them at any time.
@@ -133,6 +138,8 @@ async fn main() -> Result<()> {
         capture: Arc::new(capture_info),
         fps_x10,
         clients: Arc::new(AtomicU64::new(0)),
+        audio_clients: Arc::new(AtomicUsize::new(0)),
+        audio_muted: Arc::new(AtomicBool::new(false)),
         throttle: Arc::new(throttle::Throttle::new()),
         settings: settings.clone(),
         base_output: cfg.output.clone(),

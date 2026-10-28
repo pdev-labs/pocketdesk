@@ -61,6 +61,48 @@ class Prefs(context: Context) {
             store.edit().putBoolean("fill_screen", value).apply()
         }
 
+    /** `touch` = tap where you look; `touchpad` = relative pointer + gestures. */
+    var inputMode: String
+        get() = store.getString("input_mode", "touch") ?: "touch"
+        set(value) {
+            store.edit().putString("input_mode", value).apply()
+        }
+
+    /** Touchpad pointer gain (finger pixels -> desktop pixels). */
+    var padSpeed: Float
+        get() = store.getFloat("pad_speed", 1.6f)
+        set(value) {
+            store.edit().putFloat("pad_speed", value).apply()
+        }
+
+    /** Two-finger movement follows the content (finger down = scroll down). */
+    var naturalScroll: Boolean
+        get() = store.getBoolean("natural_scroll", true)
+        set(value) {
+            store.edit().putBoolean("natural_scroll", value).apply()
+        }
+
+    /** A short one-finger tap sends a left click in touchpad mode. */
+    var tapToClick: Boolean
+        get() = store.getBoolean("tap_to_click", true)
+        set(value) {
+            store.edit().putBoolean("tap_to_click", value).apply()
+        }
+
+    /** Play this machine's audio on the phone instead of its speakers. */
+    var audioOnPhone: Boolean
+        get() = store.getBoolean("audio_on_phone", false)
+        set(value) {
+            store.edit().putBoolean("audio_on_phone", value).apply()
+        }
+
+    /** Silence the host's own speakers while the phone is playing the audio. */
+    var muteHost: Boolean
+        get() = store.getBoolean("mute_host", true)
+        set(value) {
+            store.edit().putBoolean("mute_host", value).apply()
+        }
+
     /** Toolbar collapsed, so the desktop gets the whole screen. */
     var toolbarHidden: Boolean
         get() = store.getBoolean("toolbar_hidden", false)

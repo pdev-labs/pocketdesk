@@ -55,6 +55,13 @@ class RemoteService : Service(), SessionHub.Listener {
 
     override fun onDestroy() {
         SessionHub.removeListener(this)
+        if (foregroundStarted) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            foregroundStarted = false
+        }
+        // stopForeground is not always enough on newer Android versions: the
+        // posted notification is ongoing, so remove it explicitly as well.
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 
@@ -79,8 +86,15 @@ class RemoteService : Service(), SessionHub.Listener {
                 stopSelf()
             }
 
-            SessionHub.State.IDLE ->
+            SessionHub.State.IDLE -> {
+                // The session is over: remove the foreground notification and
+                // stop, instead of leaving a dead "Session stopped" card behind.
                 update(getString(R.string.notification_stopped))
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                foregroundStarted = false
+                getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+                stopSelf()
+            }
         }
     }
 

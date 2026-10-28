@@ -181,13 +181,20 @@ jobs:
           body: |
             PocketDesk ${{ github.ref_name }}
 
-            **Input fixed** — the pointer never moved: the monitor bounding box came out
-            infinitely wide, so every touch mapped to (0,0) and the kernel dropped the
-            duplicate. Now fixed, with tests. Modifier keys (`shift` as a key, not just a
-            modifier) are accepted too.
+            **Input modes** — choose direct touch (tap where you look) or a real
+            touchpad: drag to move, tap to click, hold to drag, two fingers to scroll,
+            two-finger tap for right click, three-finger tap for middle click. Tap to
+            click, natural scrolling and pointer speed are configurable.
 
-            **Fill screen** — mirroring can now crop the sides (⋯ → Fill screen) instead of
-            showing black bars; second-screen mode is unaffected.
+            **Audio to the phone** — ⋯ → Audio output streams this machine's sound to the
+            phone (PCM 48 kHz stereo) over a separate socket, so it keeps playing in the
+            background. The host's own speakers can be muted while the phone listens, and
+            are always restored when the session ends.
+
+            **Fill screen** — crop the sides in mirroring instead of showing black bars.
+
+            **Stop really stops** — the foreground notification is now removed when the
+            session ends.
 
             **Updates** — this release is the first signed with the permanent update key.
             Older installs were signed with a throwaway CI key, so **uninstall once** and

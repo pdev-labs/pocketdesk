@@ -31,10 +31,34 @@
 
     <string name="menu_keys">Choose keys…</string>
     <string name="menu_quality">Quality &amp; frame rate…</string>
+    <string name="menu_input_touch">Input: direct touch</string>
+    <string name="menu_input_touchpad">Input: touchpad (gestures)</string>
     <string name="menu_extend">Use phone as a second screen</string>
     <string name="menu_mirror">Back to mirroring</string>
     <string name="menu_hide_toolbar">Hide toolbar (full screen)</string>
     <string name="show_toolbar">Show toolbar</string>
+
+    <string name="input_mode_title">Input mode</string>
+    <string name="input_touch">Direct touch — tap where you look</string>
+    <string name="input_touchpad">Touchpad — relative pointer with gestures</string>
+    <string name="touch_hint">Direct touch: tap where you want the pointer. Two fingers scroll.</string>
+    <string name="touchpad_hint">Touchpad: drag to move · tap = click · hold = drag · two fingers = scroll · two-finger tap = right click</string>
+    <string name="touchpad_options">Touchpad options</string>
+    <string name="option_tap_to_click">Tap to click</string>
+    <string name="option_natural_scroll">Natural scrolling</string>
+    <string name="pointer_speed">Pointer speed</string>
+    <string name="speed_slow">Slow</string>
+    <string name="speed_normal">Normal</string>
+    <string name="speed_fast">Fast</string>
+
+    <string name="menu_audio_machine">Audio: this machine</string>
+    <string name="menu_audio_phone">Audio: phone</string>
+    <string name="audio_title">Audio output</string>
+    <string name="audio_machine">This machine — do not stream audio</string>
+    <string name="audio_phone">Phone — stream this machine\'s sound</string>
+    <string name="option_mute_host">Mute this machine while the phone plays audio</string>
+    <string name="audio_hint">Audio is playing on the phone.</string>
+    <string name="audio_failed">Audio unavailable: %1$s</string>
 
     <string name="pick_keys">Toolbar keys</string>
     <string name="done">Done</string>

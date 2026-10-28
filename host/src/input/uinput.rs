@@ -29,6 +29,8 @@ const SYN_REPORT: u16 = 0;
 const ABS_X: u16 = 0;
 const ABS_Y: u16 = 1;
 
+const REL_X: u16 = 0;
+const REL_Y: u16 = 1;
 const REL_HWHEEL: u16 = 6;
 const REL_WHEEL: u16 = 8;
 
@@ -130,10 +132,24 @@ pub struct Device {
     file: File,
     fd: RawFd,
     advertised: HashSet<u16>,
+    /// Sub-pixel remainder, so slow touchpad movement is not rounded away.
+    rel_x: f64,
+    rel_y: f64,
 }
 
 impl Device {
     pub fn new() -> Result<Self> {
+        Self::create(false)
+    }
+
+    /// A relative pointer for touchpad mode. libinput applies its normal
+    /// acceleration curve to REL_X/REL_Y, which is what makes a phone feel like
+    /// a trackpad instead of a 1:1 absolute tablet.
+    pub fn new_relative() -> Result<Self> {
+        Self::create(true)
+    }
+
+    fn create(relative: bool) -> Result<Self> {
         let file = OpenOptions::new()
             .write(true)
             .open("/dev/uinput")
@@ -158,36 +174,44 @@ impl Device {
         // Which event types the device reports.
         unsafe {
             ioctl_int(fd, UI_SET_EVBIT, EV_KEY as i32)?;
-            ioctl_int(fd, UI_SET_EVBIT, EV_ABS as i32)?;
             ioctl_int(fd, UI_SET_EVBIT, EV_REL as i32)?;
 
-            for code in keys::all_codes() {
-                ioctl_int(fd, UI_SET_KEYBIT, code as i32)?;
+            if !relative {
+                ioctl_int(fd, UI_SET_EVBIT, EV_ABS as i32)?;
+                for code in keys::all_codes() {
+                    ioctl_int(fd, UI_SET_KEYBIT, code as i32)?;
+                }
             }
             for code in [BTN_LEFT, BTN_RIGHT, BTN_MIDDLE] {
                 ioctl_int(fd, UI_SET_KEYBIT, code as i32)?;
             }
 
-            ioctl_int(fd, UI_SET_ABSBIT, ABS_X as i32)?;
-            ioctl_int(fd, UI_SET_ABSBIT, ABS_Y as i32)?;
-            ioctl_int(fd, UI_SET_RELBIT, REL_WHEEL as i32)?;
-            ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL as i32)?;
+            if relative {
+                for code in [REL_X, REL_Y, REL_WHEEL, REL_HWHEEL] {
+                    ioctl_int(fd, UI_SET_RELBIT, code as i32)?;
+                }
+            } else {
+                ioctl_int(fd, UI_SET_ABSBIT, ABS_X as i32)?;
+                ioctl_int(fd, UI_SET_ABSBIT, ABS_Y as i32)?;
+                ioctl_int(fd, UI_SET_RELBIT, REL_WHEEL as i32)?;
+                ioctl_int(fd, UI_SET_RELBIT, REL_HWHEEL as i32)?;
 
-            for code in [ABS_X, ABS_Y] {
-                let setup = UinputAbsSetup {
-                    code,
-                    absinfo: InputAbsInfo {
-                        value: 0,
-                        minimum: 0,
-                        maximum: ABS_MAX,
-                        fuzz: 0,
-                        flat: 0,
-                        resolution: 0,
-                    },
-                };
-                if libc::ioctl(fd, UI_ABS_SETUP, &setup) < 0 {
-                    return Err(std::io::Error::last_os_error())
-                        .context("UI_ABS_SETUP (kernel too old for uinput abs setup?)");
+                for code in [ABS_X, ABS_Y] {
+                    let setup = UinputAbsSetup {
+                        code,
+                        absinfo: InputAbsInfo {
+                            value: 0,
+                            minimum: 0,
+                            maximum: ABS_MAX,
+                            fuzz: 0,
+                            flat: 0,
+                            resolution: 0,
+                        },
+                    };
+                    if libc::ioctl(fd, UI_ABS_SETUP, &setup) < 0 {
+                        return Err(std::io::Error::last_os_error())
+                            .context("UI_ABS_SETUP (kernel too old for uinput abs setup?)");
+                    }
                 }
             }
 
@@ -195,10 +219,14 @@ impl Device {
             setup.id = InputId {
                 bustype: BUS_VIRTUAL,
                 vendor: 0x1209,
-                product: 0x0001,
+                product: if relative { 0x0002 } else { 0x0001 },
                 version: 1,
             };
-            let name = b"PocketDesk Virtual Input";
+            let name: &[u8] = if relative {
+                b"PocketDesk Virtual Touchpad"
+            } else {
+                b"PocketDesk Virtual Input"
+            };
             for (slot, byte) in setup.name.iter_mut().zip(name.iter()) {
                 *slot = *byte as libc::c_char;
             }
@@ -216,7 +244,13 @@ impl Device {
         Ok(Self {
             file,
             fd,
-            advertised: keys::all_codes().into_iter().collect(),
+            advertised: if relative {
+                HashSet::new()
+            } else {
+                keys::all_codes().into_iter().collect()
+            },
+            rel_x: 0.0,
+            rel_y: 0.0,
         })
     }
 
@@ -253,6 +287,37 @@ impl Device {
             event(EV_ABS, ABS_Y, y),
             event(EV_SYN, SYN_REPORT, 0),
         ])
+    }
+
+    /// Relative motion in desktop pixels. Fractional deltas accumulate, so a
+    /// slow drag that adds up to half a pixel still moves the pointer.
+    pub fn move_rel(&mut self, dx: f32, dy: f32) -> Result<()> {
+        if !dx.is_finite() || !dy.is_finite() {
+            return Ok(());
+        }
+        // A single event should never teleport the pointer; real deltas are
+        // tens of pixels, so this only guards against malformed clients.
+        self.rel_x = (self.rel_x + dx.clamp(-2000.0, 2000.0) as f64).clamp(-5000.0, 5000.0);
+        self.rel_y = (self.rel_y + dy.clamp(-2000.0, 2000.0) as f64).clamp(-5000.0, 5000.0);
+
+        let step_x = self.rel_x.round() as i32;
+        let step_y = self.rel_y.round() as i32;
+        if step_x == 0 && step_y == 0 {
+            return Ok(());
+        }
+        self.rel_x -= f64::from(step_x);
+        self.rel_y -= f64::from(step_y);
+
+        let mut events = Vec::with_capacity(3);
+        if step_x != 0 {
+            events.push(event(EV_REL, REL_X, step_x));
+        }
+        if step_y != 0 {
+            events.push(event(EV_REL, REL_Y, step_y));
+        }
+        events.push(event(EV_SYN, SYN_REPORT, 0));
+        tracing::debug!(fd = self.fd, "touchpad -> {step_x},{step_y}");
+        self.emit(&events)
     }
 
     pub fn button(&mut self, name: &str, down: bool) -> Result<()> {

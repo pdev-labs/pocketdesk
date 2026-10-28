@@ -17,10 +17,10 @@
 | Piece | State |
 | --- | --- |
 | Linux host (Hyprland/Sway/grim, X11/ffmpeg) | **Working** — screen, pointer, keyboard |
-| Android client | **Working** — stream, touch pointer, keyboard, QR pairing, background session, quality presets, second screen, in-app updates |
+| Android client | **Working** — stream, direct touch or touchpad gestures, keyboard, QR pairing, background session, quality presets, second screen, phone audio, in-app updates |
 | Windows host | Preview — screen via `gdigrab`, input not implemented yet |
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
-| Clipboard, audio, file transfer | Roadmap |
+| Clipboard, file transfer | Roadmap |
 
 Screens stream as JPEG at a paced 15 fps by default. On this project's test machine (1366×768, Hyprland, `grim`) that is ~20 fps at ~2 MB/s over Wi-Fi, with end-to-end latency around 100 ms. On a slow link, pick a lower preset in the app — the host reconfigures without restarting.
 
@@ -138,18 +138,60 @@ Release certificate (SHA-256):
 
 ## Touch controls
 
+Two input modes, picked with **⋯ → Input mode**:
+
+### Direct touch (default)
+
 | Gesture / control | What it does |
 | --- | --- |
 | Tap | Left click at that point |
 | Drag | Drag with the left button held |
 | Long press | Right click |
-| Two fingers, move up/down | Scroll wheel |
+| Two fingers, move | Scroll (vertical and horizontal) |
+
+### Touchpad
+
+The phone becomes a trackpad, so the cursor moves relatively instead of jumping to
+your finger. This is the comfortable mode when the phone is a second monitor.
+
+| Gesture | What it does |
+| --- | --- |
+| One finger, move | Move the pointer |
+| Tap | Left click |
+| Hold, then move | Click-and-drag |
+| Double-tap, then move | Drag (double-click style) |
+| Two fingers, move | Scroll — natural direction by default |
+| Two-finger tap | Right click |
+| Three-finger tap | Middle click |
+
+**⋯ → Input mode → Touchpad options** has tap-to-click, natural scrolling and
+pointer speed (slow / normal / fast). Every option is remembered.
+
+| Control | What it does |
+| --- | --- |
 | Toolbar **Keys** | Show the phone keyboard — typing lands in the focused window |
 | Toolbar **Ctrl/Alt/Shift/Super** | Latch a modifier, then press a key chip |
 | Toolbar **Exit** | Stop the session (with confirmation) |
 | Back / swipe away | Keep the session running in the background |
 
-The stream is letterboxed to your monitor's aspect ratio; the app switches to landscape automatically.
+The stream is letterboxed to your monitor's aspect ratio; **⋯ → Fill screen** crops
+the sides instead so a 16:9 desktop fills a 20:9 phone. The app switches to landscape
+automatically.
+
+## Audio
+
+**⋯ → Audio output** chooses where this machine's sound goes:
+
+* **This machine** — nothing is streamed; the host behaves normally.
+* **Phone** — the host captures its default monitor source with `parec` and streams
+  PCM (48 kHz, stereo, ~1.4 Mbit/s) over a separate WebSocket. The phone plays it with
+  `AudioTrack`, including while the app is in the background.
+* **Mute this machine** (default on) silences the host's default sink while the phone
+  is listening, so sound comes out of one place only. It is restored when the audio
+  socket closes, the session stops, or the app disconnects.
+
+Audio needs PulseAudio or PipeWire (`parec`, from `pulseaudio-utils`) on the host. If it
+is missing, the menu explains why instead of failing silently.
 
 ## Quality, keys and full screen
 
@@ -161,6 +203,10 @@ The toolbar is yours. **⋯** in the toolbar opens the session menu:
 * **Choose keys** — tick the buttons you want in the toolbar: modifiers, Esc/Tab/Enter,
   arrows, Home/End/PgUp/PgDn, Ins/Del, F1–F12, PrintScreen. **Reset** brings back the
   default set. The *Keys* (keyboard) and *Exit* buttons are always there.
+* **Input mode** — direct touch or touchpad gestures (see above).
+* **Audio output** — this machine or the phone (see above).
+* **Fill screen / Fit screen** — crop the sides of a mismatched aspect ratio, or show
+  the whole desktop with black bars.
 * **Hide toolbar (full screen)** — the desktop gets the whole display. A small **☰**
   tab in the top-right corner brings it back; the setting survives restarts.
 
@@ -280,7 +326,7 @@ docs/              architecture, wire protocol, Linux setup, security, roadmap
 
 ## Roadmap
 
-H.264 via MediaCodec for ~4× less bandwidth, TLS with certificate pinning, clipboard sync, native input on Windows and macOS, multi-monitor switching, audio, and second-screen support beyond Hyprland. See [docs/roadmap.md](docs/roadmap.md).
+H.264 via MediaCodec for ~4× less bandwidth, TLS with certificate pinning, clipboard sync, native input on Windows and macOS, multi-monitor switching, and second-screen support beyond Hyprland. See [docs/roadmap.md](docs/roadmap.md).
 
 ## License
 

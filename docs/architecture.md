@@ -137,6 +137,22 @@ The layout is re-read every 20 seconds, so hot-plugging a display or rotating th
 
 **Why uinput and not XTest/X11 automation:** uinput is below the display server, so the same code drives Wayland and X11, and the compositor treats events as first-class input (focus, hotkeys, drag-and-drop). It needs the udev rule in `scripts/setup-linux-input.sh`; without it the host degrades to view-only instead of failing.
 
+## Audio
+
+Audio is deliberately separate from the video socket. `/audio` authenticates with
+the same token, then sends a JSON config followed by raw PCM (s16le, 48 kHz,
+stereo) in 20 ms messages. The host captures the PulseAudio/PipeWire monitor of the
+default sink with `parec`; the phone writes the bytes straight into `AudioTrack`.
+No encoder means no codec negotiation and no resampling on weak phones, at the cost
+of ~1.4 Mbit/s while audio is enabled.
+
+`?mute=1` mutes the default sink for the lifetime of the socket, so the phone is the
+only output. The mute is reference-counted across audio clients and undone when the
+socket closes; a host shutdown also drops every socket, which restores the sink.
+
+Because audio has its own connection it is unaffected by `{"t":"pause"}`: the screen
+can stop streaming in the background while sound continues.
+
 ## Latency budget (LAN, reference machine)
 
 | Stage | Cost |
@@ -198,4 +214,4 @@ MainActivity ──attach/detach──► SessionHub (singleton) ◄──listen
 
 ## What is intentionally missing
 
-Clipboard, audio, file transfer, multi-monitor switching, TLS, Windows/macOS input. All are additive; none require changing the frame or input model.
+Clipboard, file transfer, multi-monitor switching, TLS, Windows/macOS input. All are additive; none require changing the frame or input model.
