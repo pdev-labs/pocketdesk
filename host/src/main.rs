@@ -206,6 +206,7 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
                 Ok(qr) => print!("{qr}"),
                 Err(err) => tracing::warn!("could not render the pairing QR: {err:#}"),
             }
+            println!("  QR looks solid? That terminal is eating colours — just type the code.");
             println!();
         } else {
             // Piped output would be garbled with ANSI blocks; the URI is enough.

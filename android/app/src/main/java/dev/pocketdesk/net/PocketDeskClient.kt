@@ -40,7 +40,7 @@ class PocketDeskClient(private val listener: Listener) {
         fun onFrame(bitmap: Bitmap)
         fun onStats(stats: Stats)
         fun onError(message: String)
-        fun onClosed(reason: String)
+        fun onClosed(reason: String, httpCode: Int?)
     }
 
     private val http = OkHttpClient.Builder()
@@ -80,12 +80,12 @@ class PocketDeskClient(private val listener: Listener) {
                 if (closed) return
                 val detail = response?.let { " (HTTP ${it.code})" } ?: ""
                 val message = t.message?.takeIf { it.isNotBlank() } ?: "connection failed"
-                post { listener.onClosed(message + detail) }
+                post { listener.onClosed(message + detail, response?.code) }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (closed) return
-                post { listener.onClosed(reason.ifBlank { "connection closed" }) }
+                post { listener.onClosed(reason.ifBlank { "connection closed" }, null) }
             }
         })
     }

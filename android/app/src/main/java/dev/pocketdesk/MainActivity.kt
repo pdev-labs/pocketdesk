@@ -466,10 +466,11 @@ class MainActivity : Activity(), SessionHub.Listener {
             return
         }
 
-        val host = uri.getQueryParameter("host") ?: return
-        val port = uri.getQueryParameter("port")?.toIntOrNull() ?: Prefs.DEFAULT_PORT
-        val token = uri.getQueryParameter("token") ?: return
-        val name = uri.getQueryParameter("name").orEmpty()
+        val host = uri.getQueryParameter("h") ?: uri.getQueryParameter("host") ?: return
+        val port = (uri.getQueryParameter("p") ?: uri.getQueryParameter("port"))
+            ?.toIntOrNull() ?: Prefs.DEFAULT_PORT
+        val token = uri.getQueryParameter("t") ?: uri.getQueryParameter("token") ?: return
+        val name = uri.getQueryParameter("n") ?: uri.getQueryParameter("name").orEmpty()
 
         hostField.setText(host)
         portField.setText(port.toString())

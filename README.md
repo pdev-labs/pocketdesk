@@ -50,6 +50,10 @@ In the app:
 
 No 64-character tokens, no typing IP addresses twice.
 
+> **Upgrading from 0.1?** The host rotates the old 64-character token to a short
+> code on first start (it prints a warning). Re-scan the QR once; the app's
+> *Forget* / *Reconnect* controls then use the new code.
+
 ## Install
 
 Grab the files from [Releases](https://github.com/pdev-labs/pocketdesk/releases):

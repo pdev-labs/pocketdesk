@@ -10,10 +10,13 @@ One WebSocket carries both directions.
 The host prints a QR code that encodes everything the app needs:
 
 ```
-pocketdesk://pair?v=1&host=192.168.1.24&port=8765&token=K7M4QX2B&name=arch
+pocketdesk://pair?v=1&h=192.168.1.24&p=8765&t=K7M4QX2B&n=arch
 ```
 
-`token` is the 8-character pairing code. It is compared case-insensitively and
+Short keys keep the QR small. The app also accepts the older long keys
+(`host`, `port`, `token`, `name`).
+
+`t` is the 8-character pairing code. It is compared case-insensitively and
 ignores dashes and spaces, so `k7m4-qx2b` and `K7M4 QX2B` are accepted. Wrong
 codes are throttled per address (see [security](security.md)).
 

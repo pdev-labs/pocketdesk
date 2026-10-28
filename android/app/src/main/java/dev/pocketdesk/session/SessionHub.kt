@@ -128,8 +128,21 @@ object SessionHub : PocketDeskClient.Listener {
         listeners.forEach { it.onError(message) }
     }
 
-    override fun onClosed(reason: String) {
+    override fun onClosed(reason: String, httpCode: Int?) {
         if (stopped) return
+
+        // Bad credentials and lockouts are not transient: retrying only turns a
+        // typo into a longer lockout.
+        when (httpCode) {
+            401 -> {
+                publish(State.FAILED, "Wrong pairing code. Scan the QR again or type the code shown by the host.")
+                return
+            }
+            429 -> {
+                publish(State.FAILED, "Too many wrong attempts. Wait a minute, then try again.")
+                return
+            }
+        }
 
         if (attempts >= MAX_ATTEMPTS) {
             publish(State.FAILED, reason)

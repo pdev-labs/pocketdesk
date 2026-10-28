@@ -1,15 +1,16 @@
 //! Pairing: the QR payload, a terminal renderer, and the machine name.
 
 use anyhow::Result;
-use qrcode::{Color, QrCode};
+use qrcode::{Color, EcLevel, QrCode};
 
-/// `pocketdesk://pair?v=1&host=…&port=…&token=…&name=…`
+/// `pocketdesk://pair?v=1&h=…&p=…&t=…&n=…`
 ///
-/// The phone app scans this and fills in every field. The token is the same
-/// short code printed in the terminal, so scanning and typing are equivalent.
+/// Short keys keep the QR small (fewer modules = easier to scan from a
+/// terminal). The phone app fills in every field from it, so scanning and
+/// typing the 8-character code are equivalent.
 pub fn uri(host: &str, port: u16, token: &str, name: &str) -> String {
     format!(
-        "pocketdesk://pair?v=1&host={host}&port={port}&token={token}&name={name}",
+        "pocketdesk://pair?v=1&h={host}&p={port}&t={token}&n={name}",
         host = percent_encode(host),
         port = port,
         token = percent_encode(token),
@@ -53,7 +54,7 @@ fn percent_encode(value: &str) -> String {
 /// background, quiet zone included. Prints in ~40 columns, which survives a
 /// split terminal or tmux pane.
 pub fn render_terminal(payload: &str) -> Result<String> {
-    let code = QrCode::new(payload.as_bytes())?;
+    let code = QrCode::with_error_correction_level(payload.as_bytes(), EcLevel::L)?;
     let width = code.width();
     let colors = code.to_colors();
     let quiet = 3usize;
@@ -93,7 +94,7 @@ mod tests {
     use super::*;
 
     fn matrix(payload: &str) -> (usize, Vec<Color>, usize) {
-        let code = QrCode::new(payload.as_bytes()).unwrap();
+        let code = QrCode::with_error_correction_level(payload.as_bytes(), EcLevel::L).unwrap();
         let width = code.width();
         (width, code.to_colors(), 4)
     }
@@ -102,9 +103,10 @@ mod tests {
     fn uri_is_parseable_and_escaped() {
         let uri = uri("2001:db8::1", 8765, "K7M4QX2B", "work station");
         assert!(uri.starts_with("pocketdesk://pair?v=1&"));
-        assert!(uri.contains("host=2001%3Adb8%3A%3A1"));
-        assert!(uri.contains("name=work%20station"));
-        assert!(uri.contains("token=K7M4QX2B"));
+        assert!(uri.contains("h=2001%3Adb8%3A%3A1"));
+        assert!(uri.contains("n=work%20station"));
+        assert!(uri.contains("t=K7M4QX2B"));
+        assert!(uri.contains("p=8765"));
     }
 
     /// Render the same matrix to greyscale and let an independent decoder read

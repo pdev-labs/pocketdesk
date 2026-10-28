@@ -103,7 +103,7 @@
                     android:hint="K7M4-QX2B"
                     android:importantForAutofill="no"
                     android:inputType="textVisiblePassword|textNoSuggestions|textCapCharacters"
-                    android:maxLength="20" />
+                    android:maxLength="128" />
 
                 <CheckBox
                     android:id="@+id/rememberBox"

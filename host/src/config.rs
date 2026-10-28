@@ -104,13 +104,34 @@ fn token_path() -> PathBuf {
 }
 
 /// Read the saved token, creating one on first run.
+///
+/// Tokens saved by 0.1 were 64 hex characters: unusable to type and dense in a
+/// QR. They are rotated to a short code once, with a warning, so upgraded
+/// installs get the same experience as fresh ones.
 pub fn load_or_create_token() -> Result<String> {
-    if let Some(token) = read_token()? {
-        return Ok(token);
+    match read_token()? {
+        Some(existing) if is_short_code(&existing) => Ok(existing),
+        Some(_legacy) => {
+            let fresh = random_token();
+            save_token(&fresh)?;
+            tracing::warn!(
+                "the saved pairing code was from an older version; rotated it to {} — re-scan the QR in the app",
+                pretty_token(&fresh)
+            );
+            Ok(fresh)
+        }
+        None => {
+            let token = random_token();
+            save_token(&token)?;
+            Ok(token)
+        }
     }
-    let token = random_token();
-    save_token(&token)?;
-    Ok(token)
+}
+
+/// True when a stored value is already a 0.2-style short code.
+pub fn is_short_code(token: &str) -> bool {
+    let normalized = normalize_token(token);
+    normalized.len() == TOKEN_LEN && normalized.bytes().all(|byte| ALPHABET.contains(&byte))
 }
 
 pub fn read_token() -> Result<Option<String>> {
@@ -204,6 +225,16 @@ mod tests {
             assert!(token.bytes().all(|b| ALPHABET.contains(&b)));
             assert!(!token.chars().any(|c| "0O1IL".contains(c)));
         }
+    }
+
+    #[test]
+    fn detects_short_codes_and_legacy_tokens() {
+        assert!(is_short_code("K7M4QX2B"));
+        assert!(is_short_code("k7m4-qx2b"));
+        assert!(!is_short_code("0B36057DCEF0ABF02DE2A1034A2C80C0ED18680D4BE7D2CF2DF7489374461F64"));
+        assert!(!is_short_code("K7M4QX2"));
+        assert!(!is_short_code("K7M4QX2B9"));
+        assert!(!is_short_code(""));
     }
 
     #[test]
