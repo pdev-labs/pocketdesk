@@ -167,7 +167,7 @@
     <string name="settings_second">Use phone as a second screen</string>
     <string name="settings_updates">Check for updates</string>
     <string name="settings_version">Version</string>
-    <string name="settings_source">Release notes &amp; source</string>
+    <string name="settings_source">Release notes</string>
 
     <string name="quality_host_default">Host default</string>
     <string name="keys_count">%1$d keys</string>

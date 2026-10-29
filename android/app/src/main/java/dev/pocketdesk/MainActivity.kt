@@ -1369,7 +1369,8 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
 
         for (host in hosts) {
             val row = layoutInflater.inflate(R.layout.item_host, discoveredList, false)
-            row.findViewById<TextView>(R.id.hostName).text = host.name
+            row.findViewById<TextView>(R.id.hostName).text =
+                host.name.ifBlank { host.address }
             row.findViewById<TextView>(R.id.hostAddress).text =
                 "${host.address}:${host.port}"
             row.setOnClickListener { useDiscovered(host) }

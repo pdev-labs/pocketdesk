@@ -77,9 +77,9 @@
         <!-- Floating session pill: keys, modifiers and the session sheet. -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/toolbar"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="top|center_horizontal"
+            android:layout_gravity="top"
             android:layout_marginStart="12dp"
             android:layout_marginTop="10dp"
             android:layout_marginEnd="12dp"
@@ -90,7 +90,7 @@
             app:strokeWidth="1dp">
 
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -101,8 +101,9 @@
 
                 <HorizontalScrollView
                     android:id="@+id/toolbarScroll"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:scrollbars="none">
 
                     <LinearLayout
