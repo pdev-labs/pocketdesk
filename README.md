@@ -79,6 +79,8 @@ Two things to know:
   prerelease tagged `legacy-latest`, and the app's **⋯ → Check for updates**
   follows that tag. The normal build is untouched — `releases/latest` still
   points at the main release.
+* `pocketdesk-legacy.apk` is signed with the **same permanent update key** as
+  the main app, so its self-updater works; debug builds are not published.
 
 The `legacy` branch is built by [`.github/workflows/legacy.yml`](.github/workflows/legacy.yml)
 on every push, so fixes ship there without waiting for a tag. Expect the older

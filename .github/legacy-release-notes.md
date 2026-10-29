@@ -19,9 +19,16 @@ cable transport, and background sessions.
 
 Notes:
 
+* Install **`pocketdesk-legacy.apk`** — it is signed with the same permanent
+  update key as the main app (certificate
+  `A6:19:9D:C0:B7:5A:FD:BE:A0:46:D8:3D:00:12:54:35:DF:60:AB:95:1D:83:54:C3:CF:4C:4E:ED:D1:7B:B2:DA`).
+  Debug-signed APKs are no longer published, because the self-updater refuses
+  to install an APK signed by a different key. If you installed an earlier
+  `-debug` build, uninstall it once.
 * Separate package: `dev.pocketdesk.legacy`, labelled **PocketDesk Legacy**, so
   it can live next to the normal app.
-* Signed with the same update key as the main app.
+* Keyboard input accepts both `commitText` and key-event typing, which is what
+  older keyboards on Android 5–7 use.
 * Every push to the `legacy` branch republishes the APK, `latest-legacy.json`
   and checksums below, and the app follows this tag when checking for updates.
 * This release is marked **prerelease** on purpose: the normal app keeps
