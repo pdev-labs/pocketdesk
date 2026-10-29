@@ -50,8 +50,8 @@ class KeySinkEditText @JvmOverloads constructor(
             }
 
             override fun sendKeyEvent(event: KeyEvent): Boolean {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    when (event.keyCode) {
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> when (event.keyCode) {
                         KeyEvent.KEYCODE_DEL -> onKeyName?.invoke("backspace")
                         KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER ->
                             onKeyName?.invoke("enter")
@@ -62,7 +62,18 @@ class KeySinkEditText @JvmOverloads constructor(
                         KeyEvent.KEYCODE_DPAD_RIGHT -> onKeyName?.invoke("right")
                         KeyEvent.KEYCODE_DPAD_UP -> onKeyName?.invoke("up")
                         KeyEvent.KEYCODE_DPAD_DOWN -> onKeyName?.invoke("down")
-                        else -> Unit
+                        else -> {
+                            // Several keyboards — common on Android 5–7 and on
+                            // hardware keyboards — type by sending key events
+                            // instead of commitText(), so the character has to
+                            // be read from the event.
+                            val c = event.unicodeChar
+                            if (c != 0) onText?.invoke(String(Character.toChars(c)))
+                        }
+                    }
+
+                    KeyEvent.ACTION_MULTIPLE -> {
+                        event.characters?.let { if (it.isNotEmpty()) onText?.invoke(it) }
                     }
                 }
                 return true
