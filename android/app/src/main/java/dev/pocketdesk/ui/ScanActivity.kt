@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.TextView
 import android.widget.Toast
@@ -61,10 +62,14 @@ class ScanActivity : ComponentActivity() {
         )
         executor = Executors.newSingleThreadExecutor()
 
-        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            startCamera()
-        } else {
+        // Runtime permissions only exist from Android 6; on 5.x the camera
+        // permission is granted at install time.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+        ) {
             cameraPermission.launch(Manifest.permission.CAMERA)
+        } else {
+            startCamera()
         }
     }
 

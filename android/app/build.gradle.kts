@@ -12,11 +12,27 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.pocketdesk"
-        minSdk = 26
+        // Separate package so the legacy build can live next to the normal app
+        // on a device that is later upgraded, and so each channel has its own
+        // update manifest.
+        applicationId = "dev.pocketdesk.legacy"
+        minSdk = 21
         targetSdk = 35
-        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 14
-        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.6.2"
+        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "legacy-dev"
+
+        // The legacy channel publishes to a fixed prerelease tag, never to
+        // `latest`, so normal installs are unaffected.
+        buildConfigField(
+            "String",
+            "UPDATE_MANIFEST",
+            "\"https://github.com/pdev-labs/pocketdesk/releases/download/legacy-latest/latest-legacy.json\"",
+        )
+        buildConfigField(
+            "String",
+            "UPDATE_PAGE",
+            "\"https://github.com/pdev-labs/pocketdesk/releases/tag/legacy-latest\"",
+        )
     }
 
     if (!ciKeystore.isNullOrBlank()) {

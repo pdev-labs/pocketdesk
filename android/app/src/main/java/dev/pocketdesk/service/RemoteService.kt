@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
+import androidx.core.content.ContextCompat
 import dev.pocketdesk.MainActivity
 import dev.pocketdesk.R
 import dev.pocketdesk.StopSessionActivity
@@ -56,12 +57,12 @@ class RemoteService : Service(), SessionHub.Listener {
     override fun onDestroy() {
         SessionHub.removeListener(this)
         if (foregroundStarted) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopForegroundCompat()
             foregroundStarted = false
         }
         // stopForeground is not always enough on newer Android versions: the
         // posted notification is ongoing, so remove it explicitly as well.
-        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+        notificationManager().cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 
@@ -90,9 +91,9 @@ class RemoteService : Service(), SessionHub.Listener {
                 // The session is over: remove the foreground notification and
                 // stop, instead of leaving a dead "Session stopped" card behind.
                 update(getString(R.string.notification_stopped))
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopForegroundCompat()
                 foregroundStarted = false
-                getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+                notificationManager().cancel(NOTIFICATION_ID)
                 stopSelf()
             }
         }
@@ -116,18 +117,25 @@ class RemoteService : Service(), SessionHub.Listener {
     private fun update(text: String) {
         if (text == lastText) return
         lastText = text
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(text))
+        notificationManager().notify(NOTIFICATION_ID, buildNotification(text))
     }
 
     private fun buildNotification(text: String): Notification {
+        // FLAG_IMMUTABLE only exists from Android 6; on 5.x the flag must be 0.
+        val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE
+            } else {
+                0
+            }
+
         val open = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java).addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
             ),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            pendingFlags,
         )
 
         // The Stop action asks first; see StopSessionActivity.
@@ -135,10 +143,16 @@ class RemoteService : Service(), SessionHub.Listener {
             this,
             1,
             Intent(this, StopSessionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            pendingFlags,
         )
 
-        val builder = Notification.Builder(this, CHANNEL_ID)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this).setPriority(Notification.PRIORITY_LOW)
+        }
+        builder
             .setSmallIcon(R.drawable.ic_stat_pocketdesk)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
@@ -146,13 +160,24 @@ class RemoteService : Service(), SessionHub.Listener {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
-            .addAction(
-                Notification.Action.Builder(
-                    Icon.createWithResource(this, R.drawable.ic_stat_pocketdesk),
-                    getString(R.string.stop_confirm),
-                    stop,
-                ).build(),
-            )
+
+        // Icon.createWithResource() arrived in Android 6; before that the
+        // action takes a drawable resource id.
+        val action = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Notification.Action.Builder(
+                Icon.createWithResource(this, R.drawable.ic_stat_pocketdesk),
+                getString(R.string.stop_confirm),
+                stop,
+            ).build()
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Action.Builder(
+                R.drawable.ic_stat_pocketdesk,
+                getString(R.string.stop_confirm),
+                stop,
+            ).build()
+        }
+        builder.addAction(action)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
@@ -161,8 +186,22 @@ class RemoteService : Service(), SessionHub.Listener {
         return builder.build()
     }
 
+    private fun notificationManager(): NotificationManager =
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    /** `stopForeground(int)` is API 24; before that only the boolean exists. */
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+    }
+
     private fun createChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = notificationManager()
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
 
         val channel = NotificationChannel(
@@ -183,7 +222,8 @@ class RemoteService : Service(), SessionHub.Listener {
         private const val NOTIFICATION_ID = 41
 
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, RemoteService::class.java))
+            // ContextCompat uses startService() below Android 8.
+            ContextCompat.startForegroundService(context, Intent(context, RemoteService::class.java))
         }
 
         fun stop(context: Context) {

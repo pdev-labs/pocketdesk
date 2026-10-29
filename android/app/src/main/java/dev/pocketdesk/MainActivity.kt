@@ -30,6 +30,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import dev.pocketdesk.net.CaptureState
 import dev.pocketdesk.net.Discovery
 import dev.pocketdesk.net.HelloInfo
@@ -664,7 +665,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         val view = TextView(this)
         view.text = label
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        view.setTextColor(getColor(R.color.text))
+        view.setTextColor(ContextCompat.getColor(this, R.color.text))
         view.gravity = Gravity.CENTER
         view.setPadding(dp(11), dp(7), dp(11), dp(7))
         view.background = getDrawable(R.drawable.bg_chip)
@@ -1080,7 +1081,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             val row = TextView(this).apply {
                 text = "${host.name} · ${host.address}:${host.port}"
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(getColor(R.color.text))
+                setTextColor(ContextCompat.getColor(this, R.color.text))
                 setPadding(dp(14), dp(12), dp(14), dp(12))
                 background = getDrawable(R.drawable.bg_chip)
                 isClickable = true
@@ -1161,7 +1162,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         for ((name, view) in modifierChips) {
             val active = name in mods
             view.isSelected = active
-            view.setTextColor(getColor(if (active) R.color.on_accent else R.color.text))
+            view.setTextColor(ContextCompat.getColor(this, if (active) R.color.on_accent else R.color.text))
         }
     }
 

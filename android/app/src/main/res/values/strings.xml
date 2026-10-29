@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PocketDesk</string>
+    <string name="app_name">PocketDesk Legacy</string>
     <string name="tagline">Your desktop, in your pocket.</string>
     <string name="hint_footer">Start the host on your computer:\n\n  pocketdesk\n\nIt prints a QR code and a short 8-character code. Scan the QR — or type the code.</string>
 
