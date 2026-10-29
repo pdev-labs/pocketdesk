@@ -8,8 +8,6 @@
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:textColorPrimary">@color/text</item>
         <item name="android:textColorSecondary">@color/muted</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
 
     <!-- Used by the "Stop session?" confirmation opened from the notification. -->
