@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="20dp">
+
+    <TextView
+        style="@style/TextAppearance.PocketDesk.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/quality_title" />
+
+    <TextView
+        style="@style/TextAppearance.PocketDesk.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="10dp"
+        android:text="@string/quality_sheet_subtitle"
+        android:textSize="13sp" />
+
+    <RadioGroup
+        android:id="@+id/qualityGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/quality0"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/preset_low" />
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/quality1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/preset_balanced" />
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/quality2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/preset_sharp" />
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/quality3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/preset_smooth" />
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/quality4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/preset_cable" />
+    </RadioGroup>
+</LinearLayout>

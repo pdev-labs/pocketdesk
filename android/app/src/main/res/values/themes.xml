@@ -1,47 +1,147 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.PocketDesk" parent="android:Theme.Material.NoActionBar">
+    <!--
+      Material You, dark. On Android 12+ DynamicColors swaps the colour roles
+      for the wallpaper palette; below that the seed palette in colors.xml is
+      used. Nothing here needs a newer API than 21, so the legacy channel can
+      share it.
+    -->
+    <style name="Theme.PocketDesk" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/on_accent</item>
+        <item name="colorPrimaryContainer">@color/accent_tint</item>
+        <item name="colorOnPrimaryContainer">@color/text</item>
+        <item name="colorSecondary">@color/good</item>
+        <item name="colorOnSecondary">#00382A</item>
+        <item name="colorSecondaryContainer">#1D3B31</item>
+        <item name="colorOnSecondaryContainer">#B8F5DA</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorSurfaceVariant">@color/surface_alt</item>
+        <item name="colorOnSurfaceVariant">@color/muted</item>
+        <item name="colorOutline">@color/stroke</item>
+        <item name="colorError">@color/error</item>
+
+        <item name="android:colorBackground">@color/bg</item>
         <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
-        <item name="android:navigationBarColor">@color/bg</item>
-        <item name="android:colorAccent">@color/accent</item>
-        <item name="android:textColorPrimary">@color/text</item>
-        <item name="android:textColorSecondary">@color/muted</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">@color/transparent</item>
+        <item name="android:navigationBarColor">@color/transparent</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <!-- Full-screen stream: no action bar, no window background flash. -->
+    <style name="Theme.PocketDesk.Stream" parent="Theme.PocketDesk">
+        <item name="android:windowBackground">@color/stream_bg</item>
     </style>
 
     <!-- Used by the "Stop session?" confirmation opened from the notification. -->
-    <style name="Theme.PocketDesk.Dialog" parent="android:Theme.Material.Dialog.Alert">
-        <item name="android:windowBackground">@android:color/transparent</item>
+    <style name="Theme.PocketDesk.Dialog" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
     </style>
 
-    <style name="FieldLabel">
+    <style name="TextAppearance.PocketDesk.Display" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="android:textSize">34sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:lineSpacingMultiplier">0.95</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="TextAppearance.PocketDesk.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="TextAppearance.PocketDesk.Section" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.09</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="TextAppearance.PocketDesk.Body" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.PocketDesk.SectionLabel" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">@color/muted</item>
-        <item name="android:textSize">10sp</item>
-        <item name="android:letterSpacing">0.09</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:textAppearance">@style/TextAppearance.PocketDesk.Section</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
     </style>
 
-    <style name="FieldInput">
+    <!-- Clickable list row used by Settings and the session sheet. -->
+    <style name="Widget.PocketDesk.Row" parent="">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">48dp</item>
-        <item name="android:layout_marginTop">6dp</item>
-        <item name="android:background">@drawable/bg_input</item>
-        <item name="android:paddingStart">14dp</item>
-        <item name="android:paddingEnd">14dp</item>
-        <item name="android:textColor">@color/text</item>
-        <item name="android:textColorHint">@color/faint</item>
-        <item name="android:textSize">15sp</item>
-        <item name="android:singleLine">true</item>
+        <item name="android:layout_height">60dp</item>
+        <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">14dp</item>
     </style>
 
+    <style name="Widget.PocketDesk.RowIcon" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:tint">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.PocketDesk.RowTitle" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="Widget.PocketDesk.RowValue" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="Widget.PocketDesk.Divider" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginStart">58dp</item>
+        <item name="android:background">?attr/colorOutline</item>
+        <item name="android:alpha">0.35</item>
+    </style>
+
+    <style name="Widget.PocketDesk.Input" parent="Widget.Material3.TextInputLayout.FilledBox">
+        <item name="boxBackgroundColor">@color/input_bg</item>
+        <item name="boxStrokeColor">?attr/colorPrimary</item>
+        <item name="hintTextColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.PocketDesk.PrimaryButton" parent="Widget.Material3.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:minHeight">54dp</item>
+        <item name="cornerRadius">18dp</item>
+    </style>
+
+    <style name="Widget.PocketDesk.TonalButton" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="cornerRadius">16dp</item>
+    </style>
+
+    <style name="Widget.PocketDesk.TextButton" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+    </style>
 </resources>

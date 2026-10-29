@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="24dp">
+
+    <TextView
+        style="@style/TextAppearance.PocketDesk.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:text="@string/session_sheet_title" />
+
+    <TextView
+        android:id="@+id/sessionTarget"
+        style="@style/TextAppearance.PocketDesk.Body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:id="@+id/actionKeys"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_keyboard" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/menu_keys" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionQuality"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_screen" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/menu_quality" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionInput"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_keyboard" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/settings_input" />
+
+        <TextView
+            android:id="@+id/actionInputValue"
+            style="@style/Widget.PocketDesk.RowValue" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionScroll"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_update" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/settings_scroll" />
+
+        <TextView
+            android:id="@+id/actionScrollValue"
+            style="@style/Widget.PocketDesk.RowValue" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionAudio"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_volume" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/settings_audio" />
+
+        <TextView
+            android:id="@+id/actionAudioValue"
+            style="@style/Widget.PocketDesk.RowValue" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionSecond"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_devices" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/settings_second" />
+
+        <TextView
+            android:id="@+id/actionSecondValue"
+            style="@style/Widget.PocketDesk.RowValue" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionScreen"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_screen" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/settings_screen" />
+
+        <TextView
+            android:id="@+id/actionScreenValue"
+            style="@style/Widget.PocketDesk.RowValue" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionHide"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_chevron" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/menu_hide_toolbar" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/actionUpdates"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            style="@style/Widget.PocketDesk.RowIcon"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_update" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/menu_check_updates" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginStart="52dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="12dp"
+        android:background="?attr/colorOutline"
+        android:alpha="0.35" />
+
+    <LinearLayout
+        android:id="@+id/actionDisconnect"
+        style="@style/Widget.PocketDesk.Row">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_screen"
+            android:tint="?attr/colorError" />
+
+        <TextView
+            style="@style/Widget.PocketDesk.RowTitle"
+            android:text="@string/session_disconnect"
+            android:textColor="?attr/colorError" />
+    </LinearLayout>
+</LinearLayout>

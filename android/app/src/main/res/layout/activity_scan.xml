@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000">
@@ -11,43 +12,71 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#40000000" />
+        android:layout_height="220dp"
+        android:layout_gravity="top"
+        android:background="@drawable/bg_scan_scrim_top" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="280dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_scan_scrim_bottom" />
+
+    <!-- Frame -->
+    <View
+        android:layout_width="270dp"
+        android:layout_height="270dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="40dp"
+        android:background="@drawable/bg_scan_frame" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:gravity="center"
-        android:lineSpacingExtra="3dp"
+        android:letterSpacing="0.02"
         android:paddingStart="28dp"
-        android:paddingTop="36dp"
+        android:paddingTop="42dp"
         android:paddingEnd="28dp"
-        android:text="@string/camera_hint"
-        android:textColor="@color/text"
-        android:textSize="15sp" />
+        android:text="@string/scan_title"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold" />
 
-    <View
-        android:layout_width="260dp"
-        android:layout_height="260dp"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_scan_frame" />
-
-    <TextView
-        android:id="@+id/cancelButton"
-        android:layout_width="wrap_content"
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="44dp"
-        android:background="@drawable/bg_chip"
-        android:clickable="true"
-        android:focusable="true"
-        android:paddingStart="26dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="26dp"
-        android:paddingBottom="12dp"
-        android:text="@string/camera_cancel"
-        android:textColor="@color/text"
-        android:textSize="14sp" />
+        android:layout_gravity="bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="24dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="12dp">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                style="@style/TextAppearance.PocketDesk.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="2dp"
+                android:text="@string/camera_hint"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cancelButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/camera_cancel"
+                android:textAllCaps="false" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 </FrameLayout>
