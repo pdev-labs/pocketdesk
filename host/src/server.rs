@@ -27,7 +27,7 @@ use tokio::sync::broadcast::error::RecvError;
 use crate::{
     config::normalize_token,
     protocol::ClientMsg,
-    second_screen,
+    view::View,
     AppState,
 };
 
@@ -53,10 +53,15 @@ async fn index(State(state): State<Arc<AppState>>) -> Html<String> {
         .read()
         .map(|s| s.clone())
         .unwrap_or_else(|e| e.into_inner().clone());
-    let mode = if is_extended(&state) {
-        "second screen"
+    let mode = if state
+        .second_screen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+    {
+        "second screen (base)"
     } else {
-        "mirror"
+        "mirror · per-phone second screens"
     };
 
     Html(format!(
@@ -231,14 +236,17 @@ enum Outcome {
 
 async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     state.clients.fetch_add(1, Ordering::Relaxed);
+    // Each connection owns its mode, capture and geometry: one phone asking for
+    // a second screen never moves another phone's stream.
+    let mut view = View::mirror(&state);
     let mut frames = state.frames.subscribe();
 
-    let settings = state
+    let settings = view
         .settings
         .read()
         .map(|s| s.clone())
         .unwrap_or_else(|e| e.into_inner().clone());
-    let (width, height) = captured_size(&state);
+    let (width, height) = view.size();
 
     let hello = serde_json::json!({
         "t": "hello",
@@ -248,7 +256,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
         "fps": settings.fps,
         "quality": settings.quality,
         "scale": settings.scale,
-        "mode": if is_extended(&state) { "extend" } else { "mirror" },
+        "mode": view.mode(),
         "width": width,
         "height": height,
         "presets": ["low", "balanced", "sharp", "smooth"],
@@ -285,12 +293,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
 
     // A phone that connects while the screen is idle would otherwise wait for
     // the next change. Send whatever we have right now.
-    let current = state
-        .last_frame
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
-    if let Some(frame) = current {
+    if let Some(frame) = view.latest() {
         let msg = serde_json::json!({"t":"size","w":frame.w,"h":frame.h});
         if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
             state.clients.fetch_sub(1, Ordering::Relaxed);
@@ -304,6 +307,10 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     }
 
     loop {
+        // Text messages are handled *after* the select, because switching
+        // display replaces the receiver the select borrows.
+        let mut incoming = None;
+
         tokio::select! {
             received = frames.recv() => {
                 match received {
@@ -331,63 +338,8 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
                 }
             }
 
-            incoming = socket.recv() => {
-                match incoming {
-                    Some(Ok(Message::Text(text))) => {
-                        match handle_text(&state, &text).await {
-                            Ok(Outcome::Reply(Some(reply))) => {
-                                if socket.send(Message::Text(reply.into())).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Ok(Outcome::Reply(None)) => {}
-                            Ok(Outcome::Pause) => {
-                                tracing::debug!("client paused its stream");
-                                streaming = false;
-                            }
-                            Ok(Outcome::Resume) => {
-                                streaming = true;
-                                let current = state
-                                    .last_frame
-                                    .lock()
-                                    .unwrap_or_else(|e| e.into_inner())
-                                    .clone();
-                                if let Some(frame) = current {
-                                    let size = serde_json::json!({
-                                        "t": "size", "w": frame.w, "h": frame.h
-                                    });
-                                    if socket
-                                        .send(Message::Text(size.to_string().into()))
-                                        .await
-                                        .is_err()
-                                    {
-                                        break;
-                                    }
-                                    if socket
-                                        .send(Message::Binary(frame.jpeg.clone()))
-                                        .await
-                                        .is_err()
-                                    {
-                                        break;
-                                    }
-                                    last_size = (frame.w, frame.h);
-                                }
-                            }
-                            Err(reply) => {
-                                let msg = serde_json::json!({"t":"error","msg":reply});
-                                if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Some(Ok(Message::Close(_))) | None => break,
-                    Some(Ok(_)) => {}
-                    Some(Err(err)) => {
-                        tracing::debug!("websocket error: {err}");
-                        break;
-                    }
-                }
+            message = socket.recv() => {
+                incoming = Some(message);
             }
 
             _ = stats_timer.tick() => {
@@ -396,7 +348,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
                     "t": "stats",
                     "fps": ((frames_sent as f64 / seconds) * 10.0).round() / 10.0,
                     "kbps": ((bytes_sent as f64 * 8.0 / 1000.0) / seconds).round() as u64,
-                    "capture_fps": state.fps_x10.load(Ordering::Relaxed) as f64 / 10.0,
+                    "capture_fps": view.fps_x10.load(Ordering::Relaxed) as f64 / 10.0,
                     "clients": state.clients.load(Ordering::Relaxed),
                 });
                 if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
@@ -405,6 +357,11 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
                 frames_sent = 0;
                 bytes_sent = 0;
                 window_start = Instant::now();
+                // An extended phone has its own monitor; keep its geometry
+                // fresh. Mirroring shares the host-wide refresher.
+                if view.is_extended() {
+                    view.refresh_layout();
+                }
             }
 
             _ = ping_timer.tick() => {
@@ -413,20 +370,75 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
                 }
             }
         }
+
+        let Some(message) = incoming else { continue };
+        match message {
+            Some(Ok(Message::Text(text))) => {
+                match handle_text(&state, &mut view, &mut frames, &text).await {
+                    Ok(Outcome::Reply(Some(reply))) => {
+                        if socket.send(Message::Text(reply.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(Outcome::Reply(None)) => {}
+                    Ok(Outcome::Pause) => {
+                        tracing::debug!("client paused its stream");
+                        streaming = false;
+                    }
+                    Ok(Outcome::Resume) => {
+                        streaming = true;
+                        if let Some(frame) = view.latest() {
+                            let size = serde_json::json!({
+                                "t": "size", "w": frame.w, "h": frame.h
+                            });
+                            if socket
+                                .send(Message::Text(size.to_string().into()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                            if socket
+                                .send(Message::Binary(frame.jpeg.clone()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                            last_size = (frame.w, frame.h);
+                        }
+                    }
+                    Err(reply) => {
+                        let msg = serde_json::json!({"t":"error","msg":reply});
+                        if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            Some(Ok(Message::Close(_))) | None => break,
+            Some(Ok(_)) => {}
+            Some(Err(err)) => {
+                tracing::debug!("websocket error: {err}");
+                break;
+            }
+        }
     }
 
-    let remaining = state.clients.fetch_sub(1, Ordering::Relaxed).saturating_sub(1);
+    state.clients.fetch_sub(1, Ordering::Relaxed);
+    // Dropping `view` removes this phone's virtual monitor and stops its
+    // capture thread; other phones are untouched.
     tracing::info!("client disconnected");
-    if remaining == 0 {
-        // The phone that asked for a second screen went away: do not leave a
-        // phantom monitor behind.
-        release_second_screen(&state);
-    }
 }
 
 /// Returns an [`Outcome`] for the session loop, or `Err(message)` when the
 /// client should be told what went wrong.
-async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Outcome, String> {
+async fn handle_text(
+    state: &Arc<AppState>,
+    view: &mut View,
+    frames: &mut tokio::sync::broadcast::Receiver<Arc<crate::capture::Frame>>,
+    text: &str,
+) -> Result<Outcome, String> {
     let msg: ClientMsg = serde_json::from_str(text).map_err(|e| format!("bad message: {e}"))?;
 
     match msg {
@@ -436,32 +448,34 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Outcome, Strin
         ClientMsg::Pause => return Ok(Outcome::Pause),
         ClientMsg::Resume => return Ok(Outcome::Resume),
 
-        // Stream settings are not input: they work in read-only mode too.
+        // Stream settings are not input: they work in read-only mode too, and
+        // they belong to this phone's view.
         ClientMsg::SetQuality {
             fps,
             quality,
             scale,
         } => {
             {
-                let mut guard = state
+                let mut guard = view
                     .settings
                     .write()
                     .unwrap_or_else(|e| e.into_inner());
                 let current = guard.clone();
                 *guard = current.merge(fps, quality, scale);
             }
-            let applied = state
+            let applied = view
                 .settings
                 .read()
                 .map(|s| s.clone())
                 .unwrap_or_else(|e| e.into_inner().clone());
             tracing::info!(
-                "stream: {} fps · quality {} · scale {:.2}×",
+                "stream ({}): {} fps · quality {} · scale {:.2}×",
+                view.mode(),
                 applied.fps,
                 applied.quality,
                 applied.scale
             );
-            return Ok(Outcome::Reply(Some(capture_state_json(state))));
+            return Ok(Outcome::Reply(Some(view.capture_json())));
         }
 
         ClientMsg::SetDisplay {
@@ -469,12 +483,22 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Outcome, Strin
             width,
             height,
         } => {
+            // Creating a compositor output blocks for a moment; block_in_place
+            // keeps the other connections streaming meanwhile.
             let state = state.clone();
-            let reply = tokio::task::spawn_blocking(move || {
-                set_display(&state, &mode, width, height).map(|_| capture_state_json(&state))
-            })
-            .await
-            .map_err(|e| format!("display change failed: {e}"))??;
+            let reply = tokio::task::block_in_place(|| {
+                if mode == "extend" {
+                    let width = width.unwrap_or(1600);
+                    let height = height.unwrap_or(900);
+                    let receiver = view
+                        .extend(&state, width, height)
+                        .map_err(|e| format!("{e:#}"))?;
+                    *frames = receiver;
+                } else {
+                    *frames = view.mirror_again(&state);
+                }
+                Ok::<String, String>(view.capture_json())
+            })?;
             return Ok(Outcome::Reply(Some(reply)));
         }
 
@@ -492,8 +516,9 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Outcome, Strin
             .unwrap_or_else(|| "input is disabled on the host".to_string()));
     };
 
-    // Keep the lock scoped: never hold it across an await point.
-    let geometry = state
+    // Input is mapped through *this* phone's monitor geometry, so a phone on a
+    // virtual display drives that display.
+    let geometry = view
         .geometry
         .read()
         .map(|g| g.clone())
@@ -504,144 +529,6 @@ async fn handle_text(state: &Arc<AppState>, text: &str) -> Result<Outcome, Strin
         .apply(&msg, &geometry)
         .map_err(|e| format!("{e:#}"))?;
     Ok(Outcome::Reply(None))
-}
-
-fn is_extended(state: &AppState) -> bool {
-    state
-        .second_screen
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .is_some()
-}
-
-fn captured_size(state: &AppState) -> (u32, u32) {
-    state
-        .geometry
-        .read()
-        .map(|g| (g.captured.w.round() as u32, g.captured.h.round() as u32))
-        .unwrap_or((0, 0))
-}
-
-fn capture_state_json(state: &AppState) -> String {
-    let settings = state
-        .settings
-        .read()
-        .map(|s| s.clone())
-        .unwrap_or_else(|e| e.into_inner().clone());
-    let (width, height) = captured_size(state);
-
-    serde_json::json!({
-        "t": "capture",
-        "fps": settings.fps,
-        "quality": settings.quality,
-        "scale": settings.scale,
-        "mode": if is_extended(state) { "extend" } else { "mirror" },
-        "width": width,
-        "height": height,
-        "output": settings.output,
-        "preset": settings.preset(),
-    })
-    .to_string()
-}
-
-/// Mirror <-> second screen. Blocking: it talks to the compositor and waits for
-/// the output to appear.
-fn set_display(
-    state: &AppState,
-    mode: &str,
-    width: Option<u32>,
-    height: Option<u32>,
-) -> Result<(), String> {
-    match mode {
-        "extend" => {
-            let width = width.unwrap_or(1600);
-            let height = height.unwrap_or(900);
-
-            let mut guard = state
-                .second_screen
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-
-            let resize = match guard.as_ref() {
-                Some(existing) => existing.width != width || existing.height != height,
-                None => true,
-            };
-
-            if resize {
-                // A display created with --extend stays put when the phone leaves.
-                let on_demand = guard.as_ref().map(|d| d.on_demand).unwrap_or(true);
-                if let Some(mut old) = guard.take() {
-                    old.hide();
-                }
-                let display =
-                    second_screen::VirtualDisplay::create(width, height, on_demand)
-                        .map_err(|e| format!("{e:#}"))?;
-                *guard = Some(display);
-            }
-
-            {
-                let mut settings = state
-                    .settings
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner());
-                settings.output = Some(second_screen::OUTPUT_NAME.to_string());
-                // The virtual monitor is already phone-sized: do not downscale.
-                settings.scale = 1.0;
-            }
-            drop(guard);
-
-            crate::refresh_geometry(state);
-            Ok(())
-        }
-
-        _ => {
-            let mut guard = state
-                .second_screen
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            {
-                let mut settings = state
-                    .settings
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner());
-                settings.output = state.base_output.clone();
-            }
-            if let Some(mut display) = guard.take() {
-                display.hide();
-            }
-            drop(guard);
-
-            crate::refresh_geometry(state);
-            Ok(())
-        }
-    }
-}
-
-/// Called when the last client disconnects.
-fn release_second_screen(state: &AppState) {
-    let mut guard = state
-        .second_screen
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-
-    let on_demand = guard.as_ref().map(|d| d.on_demand).unwrap_or(false);
-    if !on_demand {
-        return;
-    }
-
-    {
-        let mut settings = state
-            .settings
-            .write()
-            .unwrap_or_else(|e| e.into_inner());
-        settings.output = state.base_output.clone();
-    }
-    if let Some(mut display) = guard.take() {
-        display.hide();
-    }
-    drop(guard);
-
-    crate::refresh_geometry(state);
 }
 
 #[cfg(test)]

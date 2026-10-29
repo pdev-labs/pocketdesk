@@ -111,26 +111,35 @@ preset for the rest of the session.
 "Extend" is the same pipeline pointed at a different monitor.
 
 ```
-hyprctl output create headless pocketdesk-phone
-hyprctl eval 'hl.monitor({output="pocketdesk-phone", mode="1600x720",
+hyprctl output create headless pocketdesk-phone-N
+hyprctl eval 'hl.monitor({output="pocketdesk-phone-N", mode="1600x720",
                           position="auto-right", scale=1})'
         │
-        ├── settings.output = "pocketdesk-phone"   → grim -o pocketdesk-phone
-        └── layout::detect()                       → pointer maps into that rectangle
+        ├── per-view settings.output = "pocketdesk-phone-N"  → grim -o …
+        ├── private capture thread + broadcast channel
+        └── layout::detect()                                 → pointer maps there
 ```
 
+* The mode is **per connection**, not per host. Every WebSocket session owns a
+  `view::View`: a mirror view shares the base capture (one screenshot per frame for
+  any number of phones), while an extended view owns a headless output, a capture
+  thread, its own fps/quality settings and its own `Geometry`. One phone switching
+  never moves another phone.
 * The output is a real monitor: it gets workspaces, windows can be moved onto it with
   `Super+Shift+←/→`, and fullscreen works.
-* `layout.rs` needs no special case — the virtual monitor is just another entry in
+* `layout.rs` needs no special case — each virtual monitor is just another entry in
   `hyprctl -j monitors`, so the existing two-rectangle mapping (desktop bounding box
-  vs captured monitor) does the right thing.
+  vs that phone's captured monitor) does the right thing. Input from a phone is mapped
+  through that phone's view geometry.
 * Hyprland 0.5x parses config with Lua, so sizing goes through `hyprctl eval`;
   older builds fall back to `hyprctl keyword monitor …`.
-* A display created **on request** is tagged `on_demand` and removed when the last
-  client disconnects; one created by `--extend` survives, because the user asked for
-  it at startup.
-* With `--extend` the mode is stable across phone reconnects: the monitor exists
-  before any client arrives.
+* An on-demand display lives exactly as long as its connection: when that phone
+  switches back to mirror, closes the app, or loses the socket, its `View` is dropped,
+  which stops the capture thread and removes the output. Other phones are unaffected.
+* A display created by `--extend` is the base output instead: it survives phone
+  disconnects and is what mirror-mode phones see.
+* Output names are handed out from a counter (`pocketdesk-phone-1`, `-2`, …), so two
+  extended phones are two independent monitors rather than one shared one.
 
 ## Input model
 

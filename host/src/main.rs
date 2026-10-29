@@ -13,6 +13,7 @@ mod second_screen;
 mod server;
 mod throttle;
 mod usb;
+mod view;
 
 use std::{
     io::IsTerminal,
@@ -56,6 +57,10 @@ pub struct AppState {
     pub settings: Arc<RwLock<capture::CaptureSettings>>,
     /// Monitor to fall back to when a second screen is released.
     pub base_output: Option<String>,
+    /// Backend used for every capture thread, including per-phone displays.
+    pub plan: capture::CapturePlan,
+    /// Hands out `pocketdesk-phone-<n>` names, one per extended phone.
+    pub next_display: Arc<AtomicU32>,
     /// The headless output, when the phone asked for a second screen.
     pub second_screen: Arc<Mutex<Option<second_screen::VirtualDisplay>>>,
     /// Most recent captured frame, for late joiners and resumed sessions.
@@ -103,11 +108,12 @@ async fn main() -> Result<()> {
     };
     let last_frame: capture::SharedFrame = Arc::new(Mutex::new(None));
     let capture_info = capture::spawn(
-        plan,
+        plan.clone(),
         settings.clone(),
         frames.clone(),
         fps_x10.clone(),
         last_frame.clone(),
+        Arc::new(AtomicBool::new(false)),
     )?;
 
     let (input, input_error) = if cfg.read_only {
@@ -145,6 +151,8 @@ async fn main() -> Result<()> {
         throttle: Arc::new(throttle::Throttle::new()),
         settings: settings.clone(),
         base_output: cfg.output.clone(),
+        plan,
+        next_display: Arc::new(AtomicU32::new(1)),
         second_screen: Arc::new(Mutex::new(None)),
         last_frame,
     });

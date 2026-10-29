@@ -298,15 +298,23 @@ space rather than a duplicate:
 ```
 
 In the app: **⋯ → Use phone as a second screen**. The host creates a Hyprland
-headless output named `pocketdesk-phone`, parks it to the right of your desktop, and
+headless output named `pocketdesk-phone-1`, parks it to the right of your desktop, and
 starts capturing it. Move a window onto it with `Super+Shift+←/→`, or launch apps and
 let the compositor place them there. Your touch now drives that monitor, because the
 pointer is mapped into its rectangle.
 
-* Turn it off with **⋯ → Back to mirroring**, or just close the session — the virtual
-  monitor disappears with the last connected phone. Nothing is left behind.
-* Prefer it from the terminal? `pocketdesk --extend 1600x900` starts in that mode;
-  it survives the phone disconnecting.
+**The mode belongs to each phone.** Every connected phone picks mirror or second
+screen for itself:
+
+* One phone can mirror the laptop while another is extended; they do not switch each
+  other.
+* Two extended phones get two independent monitors (`pocketdesk-phone-1`,
+  `pocketdesk-phone-2`, …), each sized to its own phone and captured separately.
+* Turning it off with **⋯ → Back to mirroring** (or closing that session) removes only
+  that phone's virtual monitor. Other phones keep streaming.
+* Prefer it from the terminal? `pocketdesk --extend 1600x900` starts with a virtual
+  monitor as the base stream; it survives the phone disconnecting, and phones that
+  choose mirror see that same base output.
 * Second screen needs **Hyprland** (it is built on `hyprctl`'s headless outputs).
   On X11, Windows and macOS, mirroring still works.
 
