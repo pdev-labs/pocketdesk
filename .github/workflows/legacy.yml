@@ -16,9 +16,11 @@ on:
 permissions:
   contents: write
 
+# One publishing lane for the branch and its tags: a tag push queued behind a
+# branch build must not be overwritten by it (both write `legacy-latest`).
 concurrency:
-  group: legacy-${{ github.ref }}
-  cancel-in-progress: true
+  group: legacy-publish
+  cancel-in-progress: false
 
 jobs:
   android:
