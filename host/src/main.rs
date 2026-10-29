@@ -3,6 +3,7 @@
 mod audio;
 mod capture;
 mod config;
+mod discovery;
 mod input;
 mod keys;
 mod layout;
@@ -183,6 +184,9 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind((cfg.bind.as_str(), cfg.port))
         .await
         .map_err(|err| anyhow::anyhow!("cannot listen on {}: {err}", cfg.addr()))?;
+
+    // Advertise on the LAN only after the HTTP port is actually reachable.
+    discovery::spawn(cfg.port, state.version);
 
     axum::serve(
         listener,

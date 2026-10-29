@@ -31,6 +31,7 @@ import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import dev.pocketdesk.net.CaptureState
+import dev.pocketdesk.net.Discovery
 import dev.pocketdesk.net.HelloInfo
 import dev.pocketdesk.net.RemoteInput
 import dev.pocketdesk.net.Stats
@@ -64,6 +65,9 @@ class MainActivity : Activity(), SessionHub.Listener {
     private lateinit var connectButton: Button
     private lateinit var scanButton: Button
     private lateinit var rememberBox: CheckBox
+    private lateinit var discoveryStatus: TextView
+    private lateinit var discoveredList: LinearLayout
+    private lateinit var discoverAgain: Button
     private lateinit var statusText: TextView
     private lateinit var recentRow: View
     private lateinit var recentHost: TextView
@@ -85,6 +89,15 @@ class MainActivity : Activity(), SessionHub.Listener {
     private var pendingUpdate: UpdateInfo? = null
     private var pendingApk: File? = null
     private var awaitingExtend = false
+    private val discovery by lazy {
+        Discovery { hosts -> runOnUiThread { renderDiscovered(hosts) } }
+    }
+    private var discoveredHosts: List<Discovery.Host> = emptyList()
+    private val discoveryTimeout = Runnable {
+        if (discoveredHosts.isEmpty()) {
+            discoveryStatus.text = getString(R.string.discovery_none)
+        }
+    }
     private var audioPlaying = false
     private var audioUnavailableShown = false
 
@@ -127,6 +140,9 @@ class MainActivity : Activity(), SessionHub.Listener {
         connectButton = findViewById(R.id.connectButton)
         scanButton = findViewById(R.id.scanButton)
         rememberBox = findViewById(R.id.rememberBox)
+        discoveryStatus = findViewById(R.id.discoveryStatus)
+        discoveredList = findViewById(R.id.discoveredList)
+        discoverAgain = findViewById(R.id.discoverAgain)
         statusText = findViewById(R.id.statusText)
         recentRow = findViewById(R.id.recentRow)
         recentHost = findViewById(R.id.recentHost)
@@ -160,6 +176,10 @@ class MainActivity : Activity(), SessionHub.Listener {
         toolbarHandle.setOnClickListener { setToolbarHidden(false) }
         updateAction.setOnClickListener { startUpdate() }
         updateLater.setOnClickListener { updateRow.visibility = View.GONE }
+        discoverAgain.setOnClickListener {
+            stopDiscovery()
+            startDiscovery()
+        }
 
         screenView.onMove = { x, y -> send(RemoteInput.move(x, y)) }
         screenView.onMoveRel = { dx, dy -> send(RemoteInput.moveRel(dx, dy)) }
@@ -206,6 +226,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         updateRecent()
 
         appliedForSession = false
+        stopDiscovery()
         requestNotificationPermission()
         SessionHub.connect(host, port, token)
         // The foreground service keeps the process (and this session) alive when
@@ -373,6 +394,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     // ── switching screens ─────────────────────────────────────────────
 
     private fun showRemote() {
+        stopDiscovery()
         if (remotePanel.visibility != View.VISIBLE) {
             connectPanel.visibility = View.GONE
             remotePanel.visibility = View.VISIBLE
@@ -395,6 +417,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         connectButton.isEnabled = true
         stopHealthCheck()
         applyToolbarVisibility()
+        if (resumed) startDiscovery()
     }
 
     private fun hideSystemBars() {
@@ -964,6 +987,70 @@ class MainActivity : Activity(), SessionHub.Listener {
             .show()
     }
 
+    // ── finding the host ──────────────────────────────────────────────
+
+    private fun startDiscovery() {
+        if (SessionHub.isLive || !::discoveryStatus.isInitialized) return
+        if (discovery.isRunning) return
+        discoveredHosts = emptyList()
+        discoveredList.removeAllViews()
+        discoveredList.visibility = View.GONE
+        discoveryStatus.text = getString(R.string.discovery_looking)
+        discovery.start()
+        ui.removeCallbacks(discoveryTimeout)
+        ui.postDelayed(discoveryTimeout, 4_500)
+    }
+
+    private fun stopDiscovery() {
+        discovery.stop()
+        ui.removeCallbacks(discoveryTimeout)
+    }
+
+    private fun renderDiscovered(hosts: List<Discovery.Host>) {
+        discoveredHosts = hosts
+        if (hosts.isEmpty()) {
+            discoveredList.visibility = View.GONE
+            return
+        }
+
+        ui.removeCallbacks(discoveryTimeout)
+        discoveryStatus.text = getString(R.string.discovery_found)
+        discoveredList.visibility = View.VISIBLE
+        discoveredList.removeAllViews()
+
+        for (host in hosts) {
+            val row = TextView(this).apply {
+                text = "${host.name} · ${host.address}:${host.port}"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(getColor(R.color.text))
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = getDrawable(R.drawable.bg_chip)
+                isClickable = true
+                setOnClickListener { useDiscovered(host) }
+            }
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            params.bottomMargin = dp(6)
+            row.layoutParams = params
+            discoveredList.addView(row)
+        }
+    }
+
+    private fun useDiscovered(host: Discovery.Host) {
+        hostField.setText(host.address)
+        portField.setText(host.port.toString())
+
+        val token = tokenField.text.toString().trim()
+        if (token.isNotBlank() && (prefs.name.isBlank() || prefs.name == host.name)) {
+            connect(host.name)
+        } else {
+            statusText.text = getString(R.string.discovery_selected, host.name)
+            tokenField.requestFocus()
+        }
+    }
+
     private fun toggleSecondScreen() {
         if (prefs.secondScreen) {
             prefs.secondScreen = false
@@ -1067,6 +1154,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     override fun onResume() {
         super.onResume()
         resumed = true
+        if (!SessionHub.isLive) startDiscovery()
         // Frames were paused while we were away; ask for them again.
         SessionHub.setVisible(true)
         if (SessionHub.isLive) {
@@ -1078,6 +1166,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     override fun onPause() {
         super.onPause()
         resumed = false
+        stopDiscovery()
         // No point decoding or transferring frames nobody can see.
         SessionHub.setVisible(false)
         stopHealthCheck()
@@ -1086,6 +1175,7 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     override fun onDestroy() {
         SessionHub.removeListener(this)
+        stopDiscovery()
         // Audio is process-wide: if the session is still alive it keeps playing
         // in the background. Only detach the UI callback.
         AudioHub.onState = null

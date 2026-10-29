@@ -67,6 +67,17 @@ cd pocketdesk-linux-x86_64
 ./pocketdesk
 ```
 
+### Finding the machine
+
+You do not have to type an IP. The host broadcasts a small beacon on **UDP 8766**
+every three seconds and answers discovery probes; the app lists what it finds
+under **FOUND ON THIS NETWORK**. Tap a machine to fill in its address, then enter
+the 8-character code (or scan the QR once and it reconnects automatically later).
+
+The beacon contains the machine name, port and version — never the pairing code.
+Discovery is LAN-only; if a firewall blocks UDP 8766, the list stays empty and
+manual entry/QR still works.
+
 ### Let the phone control the machine
 
 Screen sharing works out of the box. Mouse and keyboard need one-time permission to create a virtual input device:
