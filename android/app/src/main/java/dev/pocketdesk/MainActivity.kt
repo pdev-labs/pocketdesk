@@ -765,23 +765,30 @@ class MainActivity : Activity(), SessionHub.Listener {
             orientation = RadioGroup.VERTICAL
         }
         val machine = RadioButton(this).apply {
+            id = View.generateViewId()
             text = getString(R.string.audio_machine)
-            isChecked = !prefs.audioOnPhone
         }
         val phone = RadioButton(this).apply {
+            id = View.generateViewId()
             text = getString(R.string.audio_phone)
-            isChecked = prefs.audioOnPhone
         }
         group.addView(machine)
         group.addView(phone)
 
+        // Check only after the group owns both children. Setting isChecked
+        // before addView() leaves the group without a checked id, and both
+        // buttons end up drawn as selected.
+        group.check(if (prefs.audioOnPhone) phone.id else machine.id)
+
         val mute = CheckBox(this).apply {
             text = getString(R.string.option_mute_host)
             isChecked = prefs.muteHost
-            isEnabled = phone.isChecked
+            isEnabled = prefs.audioOnPhone
             setPadding(0, dp(8), 0, 0)
         }
-        phone.setOnCheckedChangeListener { _, checked -> mute.isEnabled = checked }
+        group.setOnCheckedChangeListener { _, checkedId ->
+            mute.isEnabled = checkedId == phone.id
+        }
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -794,9 +801,10 @@ class MainActivity : Activity(), SessionHub.Listener {
             .setTitle(R.string.audio_title)
             .setView(layout)
             .setPositiveButton(R.string.done) { _, _ ->
-                prefs.audioOnPhone = phone.isChecked
+                val onPhone = group.checkedRadioButtonId == phone.id
+                prefs.audioOnPhone = onPhone
                 prefs.muteHost = mute.isChecked
-                if (prefs.audioOnPhone) {
+                if (onPhone) {
                     startAudio()
                     toast(getString(R.string.audio_hint))
                 } else {
