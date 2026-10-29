@@ -25,9 +25,13 @@ class KeySinkEditText @JvmOverloads constructor(
     var onKeyName: ((String) -> Unit)? = null
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        // Plain text, not a password variation: `VISIBLE_PASSWORD` made Gboard
+        // offer "suggest strong password" and made the system refuse
+        // screenshots while the keyboard was up.
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT or
-            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            InputType.TYPE_TEXT_VARIATION_NORMAL or
+            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
+            InputType.TYPE_TEXT_FLAG_NO_PERSONALIZED_LEARNING
         outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or
             EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_FLAG_NO_FULLSCREEN

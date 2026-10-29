@@ -401,7 +401,7 @@
             android:alpha="0.01"
             android:background="@null"
             android:importantForAutofill="no"
-            android:inputType="textVisiblePassword|textNoSuggestions" />
+            android:inputType="text|textNoSuggestions" />
 
         <!-- Small tab that brings the toolbar back when it is hidden for a
              full-screen view (see the ⋯ → Hide toolbar action). -->
