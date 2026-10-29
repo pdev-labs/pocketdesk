@@ -67,6 +67,15 @@ cd pocketdesk-linux-x86_64
 ./pocketdesk
 ```
 
+### The app
+
+The interface is built with Material You: **Home** puts the computers found on your
+network first, **Devices** keeps the paired machine and the USB/Wi-Fi choice, and
+**Settings** collects quality, screen size, input, scrolling, audio, toolbar keys and
+updates. On Android 12+ the palette follows your wallpaper; older phones use the
+built-in dark seed. During a session the controls are a floating pill that fades out
+after a few seconds — tap **☰** to bring it back.
+
 ### Finding the machine
 
 You do not have to type an IP. The host broadcasts a small beacon on **UDP 8766**
