@@ -12,6 +12,11 @@ equivalents:
 * **Updates** — the installer, SHA-256 and signature checks are the same; on
   Android 5/6 the “install unknown apps” screen is the old security settings one.
 
+The **interface** is rebuilt around Material You: Home / Devices / Settings tabs, a
+discovery-first connect screen, bottom sheets for quality/input/audio/keys, and a
+floating session pill that fades out on its own. On Android 12+ the palette follows
+the wallpaper; Android 5–11 use the built-in dark seed.
+
 Everything else is unchanged: LAN discovery, QR pairing and remembered devices,
 direct touch and touchpad gestures, natural scrolling, keyboard combos with the
 phone keyboard, screen fit/fill/stretch, audio to the phone, second screen, USB
