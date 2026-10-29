@@ -1,17 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#0B0C0F</color>
-    <color name="surface">#14161B</color>
-    <color name="surface_alt">#1A1D24</color>
-    <color name="input_bg">#0E1015</color>
-    <color name="stroke">#262A33</color>
-    <color name="text">#E7E9EE</color>
-    <color name="muted">#8B93A7</color>
-    <color name="faint">#5A6274</color>
-    <color name="accent">#6C8CFF</color>
-    <color name="accent_pressed">#5677EE</color>
-    <color name="accent_tint">#26304C</color>
-    <color name="on_accent">#0B0C0F</color>
-    <color name="good">#5CD6A0</color>
-    <color name="icon_bg">#0B0C0F</color>
+    <!-- Static Material 3 seed palette: used below Android 12 and whenever the
+         wallpaper palette is unavailable. On Android 12+ DynamicColors replaces
+         the primary/secondary/surface roles at runtime. -->
+    <color name="bg">#0E1014</color>
+    <color name="surface">#15181E</color>
+    <color name="surface_alt">#1C2027</color>
+    <color name="surface_high">#232833</color>
+    <color name="input_bg">#111419</color>
+    <color name="stroke">#2B303A</color>
+    <color name="text">#E4E6ED</color>
+    <color name="muted">#A6ACBA</color>
+    <color name="faint">#737A89</color>
+    <color name="accent">#B7C4FF</color>
+    <color name="accent_pressed">#9FB1FF</color>
+    <color name="accent_tint">#2E3860</color>
+    <color name="on_accent">#16204A</color>
+    <color name="good">#7FDDB4</color>
+    <color name="error">#FFB4AB</color>
+    <color name="icon_bg">#0E1014</color>
+
+    <!-- Stream chrome stays dark regardless of the wallpaper palette. -->
+    <color name="stream_bg">#000000</color>
+    <color name="toolbar_bg">#E615181E</color>
+    <color name="toolbar_stroke">#33FFFFFF</color>
+    <color name="scrim">#99000000</color>
+    <color name="transparent">#00000000</color>
 </resources>

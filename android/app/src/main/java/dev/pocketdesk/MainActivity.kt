@@ -1,12 +1,11 @@
 package dev.pocketdesk
 
 import android.Manifest
-import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.net.Uri
@@ -18,19 +17,30 @@ import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.slider.Slider
+import com.google.android.material.switchmaterial.SwitchMaterial
 import dev.pocketdesk.net.CaptureState
 import dev.pocketdesk.net.Discovery
 import dev.pocketdesk.net.HelloInfo
@@ -48,7 +58,7 @@ import dev.pocketdesk.updates.Updater
 import java.io.File
 import java.util.Locale
 
-class MainActivity : Activity(), SessionHub.Listener {
+class MainActivity : AppCompatActivity(), SessionHub.Listener {
 
     /** One toolbar button: a modifier (latched) or a key (tapped once). */
     private data class KeyDef(val name: String, val label: String, val modifier: Boolean = false)
@@ -60,6 +70,10 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     private lateinit var connectPanel: View
     private lateinit var remotePanel: View
+    private lateinit var homeTab: View
+    private lateinit var devicesTab: View
+    private lateinit var settingsTab: View
+    private lateinit var bottomNav: BottomNavigationView
     private lateinit var hostField: EditText
     private lateinit var portField: EditText
     private lateinit var tokenField: EditText
@@ -74,19 +88,52 @@ class MainActivity : Activity(), SessionHub.Listener {
     private lateinit var statusText: TextView
     private lateinit var recentRow: View
     private lateinit var recentHost: TextView
-    private lateinit var recentConnect: TextView
-    private lateinit var recentForget: TextView
+    private lateinit var recentConnect: Button
+    private lateinit var recentForget: Button
     private lateinit var screenView: ScreenView
     private lateinit var keySink: KeySinkEditText
     private lateinit var toolbar: View
-    private lateinit var toolbarHandle: TextView
+    private lateinit var toolbarHandle: View
     private lateinit var toolbarButtons: LinearLayout
     private lateinit var statsText: TextView
     private lateinit var updateRow: View
     private lateinit var updateTitle: TextView
     private lateinit var updateDetail: TextView
-    private lateinit var updateAction: TextView
-    private lateinit var updateLater: TextView
+    private lateinit var updateAction: Button
+    private lateinit var updateLater: Button
+
+    // Devices tab
+    private lateinit var deviceName: TextView
+    private lateinit var deviceAddress: TextView
+    private lateinit var deviceTransport: TextView
+    private lateinit var deviceActions: View
+    private lateinit var deviceConnect: Button
+    private lateinit var deviceForget: Button
+    private lateinit var deviceScan: Button
+    private lateinit var deviceManual: Button
+    private lateinit var deviceUsbSwitch: SwitchMaterial
+    private lateinit var deviceUsbHint: TextView
+
+    // Settings tab
+    private lateinit var settingsQuality: View
+    private lateinit var settingsQualityValue: TextView
+    private lateinit var settingsScreen: View
+    private lateinit var settingsScreenValue: TextView
+    private lateinit var settingsInput: View
+    private lateinit var settingsInputValue: TextView
+    private lateinit var settingsScroll: View
+    private lateinit var settingsScrollValue: TextView
+    private lateinit var settingsAudio: View
+    private lateinit var settingsAudioValue: TextView
+    private lateinit var settingsKeys: View
+    private lateinit var settingsKeysValue: TextView
+    private lateinit var settingsSecondSwitch: SwitchMaterial
+    private lateinit var settingsUpdates: View
+    private lateinit var settingsSource: View
+    private lateinit var settingsVersion: TextView
+
+    private var syncingUsb = false
+    private var syncingSecond = false
 
     private val updater by lazy { Updater(this) }
     private var pendingUpdate: UpdateInfo? = null
@@ -118,7 +165,9 @@ class MainActivity : Activity(), SessionHub.Listener {
     private var autoDowngraded = false
     private var captureState: CaptureState? = null
     private val mods = linkedSetOf<String>()
-    private val modifierChips = HashMap<String, TextView>()
+    private val modifierChips = HashMap<String, MaterialButton>()
+
+    private val hideToolbarRunnable = Runnable { collapseToolbar(animate = true) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,7 +184,15 @@ class MainActivity : Activity(), SessionHub.Listener {
             }
         }
 
-        connectPanel = findViewById(R.id.connectScroll)
+        // Edge-to-edge: the shell pads itself by the system bars and the IME;
+        // the stream draws under everything.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        connectPanel = findViewById(R.id.appShell)
+        homeTab = findViewById(R.id.homeTab)
+        devicesTab = findViewById(R.id.devicesTab)
+        settingsTab = findViewById(R.id.settingsTab)
+        bottomNav = findViewById(R.id.bottomNav)
         remotePanel = findViewById(R.id.remotePanel)
         hostField = findViewById(R.id.hostField)
         portField = findViewById(R.id.portField)
@@ -165,29 +222,100 @@ class MainActivity : Activity(), SessionHub.Listener {
         updateAction = findViewById(R.id.updateAction)
         updateLater = findViewById(R.id.updateLater)
 
+        deviceName = findViewById(R.id.deviceName)
+        deviceAddress = findViewById(R.id.deviceAddress)
+        deviceTransport = findViewById(R.id.deviceTransport)
+        deviceActions = findViewById(R.id.deviceActions)
+        deviceConnect = findViewById(R.id.deviceConnect)
+        deviceForget = findViewById(R.id.deviceForget)
+        deviceScan = findViewById(R.id.deviceScan)
+        deviceManual = findViewById(R.id.deviceManual)
+        deviceUsbSwitch = findViewById(R.id.deviceUsbSwitch)
+        deviceUsbHint = findViewById(R.id.deviceUsbHint)
+
+        settingsQuality = findViewById(R.id.settingsQuality)
+        settingsQualityValue = findViewById(R.id.settingsQualityValue)
+        settingsScreen = findViewById(R.id.settingsScreen)
+        settingsScreenValue = findViewById(R.id.settingsScreenValue)
+        settingsInput = findViewById(R.id.settingsInput)
+        settingsInputValue = findViewById(R.id.settingsInputValue)
+        settingsScroll = findViewById(R.id.settingsScroll)
+        settingsScrollValue = findViewById(R.id.settingsScrollValue)
+        settingsAudio = findViewById(R.id.settingsAudio)
+        settingsAudioValue = findViewById(R.id.settingsAudioValue)
+        settingsKeys = findViewById(R.id.settingsKeys)
+        settingsKeysValue = findViewById(R.id.settingsKeysValue)
+        settingsSecondSwitch = findViewById(R.id.settingsSecondSwitch)
+        settingsUpdates = findViewById(R.id.settingsUpdates)
+        settingsSource = findViewById(R.id.settingsSource)
+        settingsVersion = findViewById(R.id.settingsVersion)
+
+        val root = findViewById<View>(R.id.root)
+        val shell = connectPanel
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            shell.setPadding(0, bars.top, 0, maxOf(bars.bottom, ime.bottom))
+            (toolbar.layoutParams as? FrameLayout.LayoutParams)?.topMargin = cutout.top + dp(10)
+            (toolbarHandle.layoutParams as? FrameLayout.LayoutParams)?.topMargin =
+                cutout.top + dp(10)
+            insets
+        }
+
         hostField.setText(prefs.wifiHost.ifBlank { prefs.host })
         portField.setText(prefs.port.toString())
         tokenField.setText(prefs.token)
         rememberBox.isChecked = prefs.remember
         rememberBox.setOnCheckedChangeListener { _, checked -> prefs.remember = checked }
 
-        usbBox.isChecked = prefs.usbCable
         setUsbMode(prefs.usbCable, applyPreset = false)
-        usbBox.setOnCheckedChangeListener { _, checked -> setUsbMode(checked, applyPreset = true) }
-        updateRecent()
-
-        scanButton.setOnClickListener {
-            startActivityForResult(Intent(this, ScanActivity::class.java), SCAN_REQUEST)
+        usbBox.setOnCheckedChangeListener { _, checked ->
+            if (!syncingUsb) setUsbMode(checked, applyPreset = true)
         }
+        deviceUsbSwitch.setOnCheckedChangeListener { _, checked ->
+            if (!syncingUsb) setUsbMode(checked, applyPreset = true)
+        }
+
+        // ── navigation ─────────────────────────────────────────────────
+        bottomNav.setOnItemSelectedListener { item ->
+            showTab(item.itemId)
+            true
+        }
+        showTab(R.id.nav_home)
+
+        scanButton.setOnClickListener { scan() }
+        deviceScan.setOnClickListener { scan() }
         connectButton.setOnClickListener { connect() }
         recentConnect.setOnClickListener { useSaved() }
         recentForget.setOnClickListener { forgetSaved() }
-        toolbarHandle.setOnClickListener { setToolbarHidden(false) }
+        deviceConnect.setOnClickListener { useSaved() }
+        deviceForget.setOnClickListener { forgetSaved() }
+        deviceManual.setOnClickListener { focusPairingCode() }
+        toolbarHandle.setOnClickListener {
+            prefs.toolbarHidden = false
+            revealToolbar()
+        }
         updateAction.setOnClickListener { startUpdate() }
         updateLater.setOnClickListener { updateRow.visibility = View.GONE }
         discoverAgain.setOnClickListener {
             stopDiscovery()
             startDiscovery()
+        }
+
+        // ── settings rows ──────────────────────────────────────────────
+        settingsQuality.setOnClickListener { pickQuality() }
+        settingsScreen.setOnClickListener { pickScreenMode() }
+        settingsInput.setOnClickListener { pickInputMode() }
+        settingsScroll.setOnClickListener { toggleScroll() }
+        settingsAudio.setOnClickListener { pickAudio() }
+        settingsKeys.setOnClickListener { pickKeys() }
+        settingsUpdates.setOnClickListener { maybeCheckForUpdates(force = true) }
+        settingsSource.setOnClickListener {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, updater.releasesPage())) }
+        }
+        settingsSecondSwitch.setOnCheckedChangeListener { _, checked ->
+            if (!syncingSecond) setSecondScreen(checked)
         }
 
         screenView.onMove = { x, y -> send(RemoteInput.move(x, y)) }
@@ -204,7 +332,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         applyScreenMode()
         applyInputMode()
         buildToolbar()
-        applyToolbarVisibility()
+        updateRecent()
         SessionHub.addListener(this)
 
         // Quiet check on launch: costs one HEAD-sized request, at most every
@@ -259,6 +387,11 @@ class MainActivity : Activity(), SessionHub.Listener {
 
         prefs.usbCable = enabled
         usbHint.visibility = if (enabled) View.VISIBLE else View.GONE
+        deviceUsbHint.visibility = if (enabled) View.VISIBLE else View.GONE
+        syncingUsb = true
+        if (usbBox.isChecked != enabled) usbBox.isChecked = enabled
+        if (deviceUsbSwitch.isChecked != enabled) deviceUsbSwitch.isChecked = enabled
+        syncingUsb = false
         hostField.isEnabled = !enabled
         if (enabled) {
             hostField.setText("127.0.0.1")
@@ -277,6 +410,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             prefs.saveStream(15, 65, 1.0)
             if (SessionHub.isLive) SessionHub.setQuality(15, 65, 1.0)
         }
+        refreshSettings()
     }
 
     private fun useSaved() {
@@ -296,18 +430,103 @@ class MainActivity : Activity(), SessionHub.Listener {
         portField.setText(Prefs.DEFAULT_PORT.toString())
         tokenField.setText("")
         updateRecent()
-        statusText.text = "Saved machine forgotten."
+        statusText.text = getString(R.string.status_forgotten)
     }
 
     private fun updateRecent() {
-        if (!prefs.hasSaved) {
-            recentRow.visibility = View.GONE
+        val saved = prefs.hasSaved
+        recentRow.visibility = if (saved) View.VISIBLE else View.GONE
+        deviceActions.visibility = if (saved) View.VISIBLE else View.GONE
+        deviceTransport.visibility = if (saved) View.VISIBLE else View.GONE
+
+        if (!saved) {
+            deviceName.text = getString(R.string.device_none)
+            deviceAddress.text = getString(R.string.device_none_hint)
+            refreshSettings()
             return
         }
-        recentRow.visibility = View.VISIBLE
+
         val label = prefs.name.ifBlank { prefs.host }
         val shownHost = prefs.wifiHost.ifBlank { prefs.host }
         recentHost.text = "$label · $shownHost:${prefs.port}"
+        deviceName.text = label
+        deviceAddress.text = "$shownHost:${prefs.port}"
+        deviceTransport.text = getString(
+            if (prefs.usbCable) R.string.device_usb_mode else R.string.device_wifi_mode,
+        )
+        refreshSettings()
+    }
+
+    /** Row summaries on the Settings and Devices tabs. */
+    private fun refreshSettings() {
+        if (!::prefs.isInitialized || !::settingsQualityValue.isInitialized) return
+
+        settingsQualityValue.text = if (prefs.quality > 0) {
+            "${prefs.fps.takeIf { it > 0 } ?: "?"} fps · q${prefs.quality}"
+        } else {
+            getString(R.string.quality_host_default)
+        }
+        settingsScreenValue.text = getString(
+            when (prefs.screenMode) {
+                "fill" -> R.string.screen_fill_short
+                "stretch" -> R.string.screen_stretch_short
+                else -> R.string.screen_fit_short
+            },
+        )
+        settingsInputValue.text = getString(
+            if (prefs.inputMode == "touchpad") R.string.input_touchpad_short
+            else R.string.input_touch_short,
+        )
+        settingsScrollValue.text = getString(
+            if (prefs.naturalScroll) R.string.scroll_natural_short
+            else R.string.scroll_traditional_short,
+        )
+        settingsAudioValue.text = getString(
+            if (prefs.audioOnPhone) R.string.audio_phone_short
+            else R.string.audio_machine_short,
+        )
+        settingsKeysValue.text = getString(
+            R.string.keys_count,
+            prefs.keyList.ifEmpty { DEFAULT_KEYS }.size,
+        )
+        settingsVersion.text = "PocketDesk ${BuildConfig.VERSION_NAME}"
+
+        syncingSecond = true
+        if (settingsSecondSwitch.isChecked != prefs.secondScreen) {
+            settingsSecondSwitch.isChecked = prefs.secondScreen
+        }
+        syncingSecond = false
+
+        syncingUsb = true
+        if (deviceUsbSwitch.isChecked != prefs.usbCable) {
+            deviceUsbSwitch.isChecked = prefs.usbCable
+        }
+        syncingUsb = false
+        deviceUsbHint.visibility = if (prefs.usbCable) View.VISIBLE else View.GONE
+    }
+
+    private fun showTab(itemId: Int) {
+        homeTab.visibility = if (itemId == R.id.nav_home) View.VISIBLE else View.GONE
+        devicesTab.visibility = if (itemId == R.id.nav_devices) View.VISIBLE else View.GONE
+        settingsTab.visibility = if (itemId == R.id.nav_settings) View.VISIBLE else View.GONE
+        if (itemId == R.id.nav_devices || itemId == R.id.nav_settings) refreshSettings()
+        hideKeyboard()
+    }
+
+    private fun scan() {
+        startActivityForResult(Intent(this, ScanActivity::class.java), SCAN_REQUEST)
+    }
+
+    private fun focusPairingCode() {
+        bottomNav.selectedItemId = R.id.nav_home
+        tokenField.postDelayed(
+            {
+                tokenField.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(tokenField, InputMethodManager.SHOW_IMPLICIT)
+            },
+            150,
+        )
     }
 
     private fun requestNotificationPermission() {
@@ -428,6 +647,7 @@ class MainActivity : Activity(), SessionHub.Listener {
                 // (no Hyprland, or the request failed): do not keep asking.
                 prefs.secondScreen = false
                 toast(getString(R.string.second_screen_needs_host))
+                refreshSettings()
             }
         }
     }
@@ -467,36 +687,21 @@ class MainActivity : Activity(), SessionHub.Listener {
         connectButton.isEnabled = true
         stopHealthCheck()
         applyToolbarVisibility()
+        bottomNav.selectedItemId = R.id.nav_home
+        refreshSettings()
         if (resumed) startDiscovery()
     }
 
     private fun hideSystemBars() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false)
-            window.insetsController?.let { controller ->
-                controller.hide(WindowInsets.Type.systemBars())
-                controller.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                )
-        }
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
     }
 
     private fun showSystemBars() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(true)
-            window.insetsController?.show(WindowInsets.Type.systemBars())
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-        }
+        WindowInsetsControllerCompat(window, window.decorView)
+            .show(WindowInsetsCompat.Type.systemBars())
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -514,7 +719,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             return
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.stop_title)
             .setMessage(getString(R.string.stop_message, SessionHub.target))
             .setPositiveButton(R.string.stop_confirm) { _, _ -> stopSession() }
@@ -571,7 +776,7 @@ class MainActivity : Activity(), SessionHub.Listener {
 
         val info = pendingUpdate ?: return
         if (SessionHub.isLive) {
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.update_session_title)
                 .setMessage(getString(R.string.update_session_message, info.version))
                 .setPositiveButton(R.string.update_session_confirm) { _, _ ->
@@ -613,7 +818,7 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     private fun installUpdate(file: File) {
         if (!updater.canInstall()) {
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.update_permission_title)
                 .setMessage(R.string.update_permission_message)
                 .setPositiveButton(R.string.update_permission_open) { _, _ ->
@@ -638,106 +843,203 @@ class MainActivity : Activity(), SessionHub.Listener {
         return String.format(Locale.US, "%.1f MB", mb)
     }
 
-    // ── toolbar ───────────────────────────────────────────────────────
+    // ── floating session pill ─────────────────────────────────────────
 
     private fun buildToolbar() {
         toolbarButtons.removeAllViews()
         modifierChips.clear()
         mods.clear()
 
-        toolbarButtons.addView(chip("Keys") { toggleKeyboard() })
+        toolbarButtons.addView(chip("Keys", checkable = false) { toggleKeyboard() })
 
         val selected = prefs.keyList.ifEmpty { DEFAULT_KEYS }
         for (name in selected) {
             val def = KEY_CATALOG.firstOrNull { it.name == name } ?: continue
-            val view = chip(def.label) {
+            val view = chip(def.label, checkable = def.modifier) {
                 if (def.modifier) toggleModifier(def.name) else sendKey(def.name)
             }
             if (def.modifier) modifierChips[def.name] = view
             toolbarButtons.addView(view)
         }
 
-        toolbarButtons.addView(chip("⋯") { showSessionMenu() })
-        toolbarButtons.addView(chip("Exit") { confirmStop() })
+        toolbarButtons.addView(chip("⋯", checkable = false) { showSessionMenu() })
+        toolbarButtons.addView(chip("Exit", checkable = false) { confirmStop() })
     }
 
-    private fun chip(label: String, onClick: () -> Unit): TextView {
-        val view = TextView(this)
-        view.text = label
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        view.setTextColor(ContextCompat.getColor(this, R.color.text))
-        view.gravity = Gravity.CENTER
-        view.setPadding(dp(11), dp(7), dp(11), dp(7))
-        view.background = getDrawable(R.drawable.bg_chip)
-        view.isClickable = true
-        view.isFocusable = false
-        view.setOnClickListener { onClick() }
+    private fun themeColor(attr: Int): Int {
+        val value = TypedValue()
+        if (!theme.resolveAttribute(attr, value, true)) {
+            return ContextCompat.getColor(this, R.color.text)
+        }
+        return if (value.resourceId != 0) {
+            ContextCompat.getColor(this, value.resourceId)
+        } else {
+            value.data
+        }
+    }
+
+    /**
+     * A pill chip. Modifiers are checkable and use the M3 primary container;
+     * one-shot keys stay neutral. Colours come from the theme, so the chips
+     * follow the Material You palette.
+     */
+    private fun chip(label: String, checkable: Boolean, onClick: () -> Unit): MaterialButton {
+        val primary = themeColor(com.google.android.material.R.attr.colorPrimary)
+        val onPrimary = themeColor(com.google.android.material.R.attr.colorOnPrimary)
+        val container = themeColor(com.google.android.material.R.attr.colorSurfaceVariant)
+        val onSurface = themeColor(com.google.android.material.R.attr.colorOnSurface)
+
+        val button = layoutInflater.inflate(
+            R.layout.item_toolbar_chip,
+            toolbarButtons,
+            false,
+        ) as MaterialButton
+        button.text = label
+        button.textSize = 12f
+        button.isAllCaps = false
+        button.minWidth = 0
+        button.minimumWidth = 0
+        button.insetTop = 0
+        button.insetBottom = 0
+        button.setPadding(dp(11), 0, dp(11), 0)
+        button.cornerRadius = dp(18)
+        button.isCheckable = checkable
+        button.backgroundTintList = ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+            intArrayOf(primary, container),
+        )
+        button.setTextColor(
+            ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(onPrimary, onSurface),
+            ),
+        )
+        button.isFocusable = false
+        button.setOnClickListener {
+            pokeToolbar()
+            onClick()
+        }
 
         val params = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
+            dp(34),
         )
         params.marginEnd = dp(6)
-        view.layoutParams = params
-        return view
+        button.layoutParams = params
+        return button
+    }
+
+    private fun pokeToolbar() {
+        if (remotePanel.visibility != View.VISIBLE || toolbar.visibility != View.VISIBLE) return
+        ui.removeCallbacks(hideToolbarRunnable)
+        ui.postDelayed(hideToolbarRunnable, TOOLBAR_TIMEOUT)
+    }
+
+    /** Fade the pill in and start the auto-hide timer. */
+    private fun revealToolbar() {
+        if (remotePanel.visibility != View.VISIBLE) return
+        ui.removeCallbacks(hideToolbarRunnable)
+        toolbar.animate().cancel()
+        toolbar.visibility = View.VISIBLE
+        toolbar.alpha = 0f
+        toolbar.animate().alpha(1f).setDuration(160).start()
+        toolbarHandle.visibility = View.GONE
+        if (!prefs.toolbarHidden) {
+            ui.postDelayed(hideToolbarRunnable, TOOLBAR_TIMEOUT)
+        }
+    }
+
+    private fun collapseToolbar(animate: Boolean) {
+        ui.removeCallbacks(hideToolbarRunnable)
+        if (remotePanel.visibility != View.VISIBLE) return
+        if (animate) {
+            toolbar.animate().cancel()
+            toolbar.animate()
+                .alpha(0f)
+                .setDuration(150)
+                .withEndAction { toolbar.visibility = View.GONE }
+                .start()
+        } else {
+            toolbar.animate().cancel()
+            toolbar.alpha = 0f
+            toolbar.visibility = View.GONE
+        }
+        toolbarHandle.visibility = View.VISIBLE
     }
 
     private fun applyToolbarVisibility() {
-        val remote = remotePanel.visibility == View.VISIBLE
-        val hidden = remote && prefs.toolbarHidden
-        toolbar.visibility = if (hidden) View.GONE else View.VISIBLE
-        toolbarHandle.visibility = if (hidden) View.VISIBLE else View.GONE
+        if (remotePanel.visibility != View.VISIBLE) {
+            ui.removeCallbacks(hideToolbarRunnable)
+            toolbar.visibility = View.GONE
+            toolbarHandle.visibility = View.GONE
+            return
+        }
+        if (prefs.toolbarHidden) {
+            collapseToolbar(animate = false)
+        } else {
+            revealToolbar()
+        }
     }
 
     private fun setToolbarHidden(hidden: Boolean) {
         prefs.toolbarHidden = hidden
-        applyToolbarVisibility()
-        if (hidden) toast("Toolbar hidden — tap ☰ to bring it back.")
+        if (hidden) {
+            collapseToolbar(animate = true)
+            toast("Toolbar hidden — tap ☰ to bring it back.")
+        } else {
+            revealToolbar()
+        }
     }
 
     private fun showSessionMenu() {
-        val items = arrayOf(
-            getString(R.string.menu_keys),
-            getString(R.string.menu_quality),
-            getString(
-                if (prefs.inputMode == "touchpad") R.string.menu_input_touchpad
-                else R.string.menu_input_touch,
-            ),
-            getString(
-                if (prefs.naturalScroll) R.string.menu_scroll_natural
-                else R.string.menu_scroll_traditional,
-            ),
-            getString(
-                if (prefs.audioOnPhone) R.string.menu_audio_phone
-                else R.string.menu_audio_machine,
-            ),
-            if (prefs.secondScreen) getString(R.string.menu_mirror) else getString(R.string.menu_extend),
-            getString(R.string.menu_hide_toolbar),
-            getString(
-                when (prefs.screenMode) {
-                    "fill" -> R.string.menu_screen_fill
-                    "stretch" -> R.string.menu_screen_stretch
-                    else -> R.string.menu_screen_fit
-                },
-            ),
-            getString(R.string.menu_check_updates),
+        pokeToolbar()
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_session, null)
+
+        content.findViewById<TextView>(R.id.sessionTarget).text = SessionHub.target
+        content.findViewById<TextView>(R.id.actionInputValue).text = getString(
+            if (prefs.inputMode == "touchpad") R.string.input_touchpad_short
+            else R.string.input_touch_short,
+        )
+        content.findViewById<TextView>(R.id.actionScrollValue).text = getString(
+            if (prefs.naturalScroll) R.string.scroll_natural_short
+            else R.string.scroll_traditional_short,
+        )
+        content.findViewById<TextView>(R.id.actionAudioValue).text = getString(
+            if (prefs.audioOnPhone) R.string.audio_phone_short
+            else R.string.audio_machine_short,
+        )
+        content.findViewById<TextView>(R.id.actionSecondValue).text = getString(
+            if (prefs.secondScreen) R.string.session_second_on else R.string.session_second_off,
+        )
+        content.findViewById<TextView>(R.id.actionScreenValue).text = getString(
+            when (prefs.screenMode) {
+                "fill" -> R.string.screen_fill_short
+                "stretch" -> R.string.screen_stretch_short
+                else -> R.string.screen_fit_short
+            },
         )
 
-        AlertDialog.Builder(this)
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> pickKeys()
-                    1 -> pickQuality()
-                    2 -> pickInputMode()
-                    3 -> toggleScroll()
-                    4 -> pickAudio()
-                    5 -> toggleSecondScreen()
-                    6 -> setToolbarHidden(true)
-                    7 -> pickScreenMode()
-                    8 -> maybeCheckForUpdates(force = true)
-                }
+        fun action(id: Int, run: () -> Unit) {
+            content.findViewById<View>(id).setOnClickListener {
+                sheet.dismiss()
+                run()
             }
-            .show()
+        }
+
+        action(R.id.actionKeys) { pickKeys() }
+        action(R.id.actionQuality) { pickQuality() }
+        action(R.id.actionInput) { pickInputMode() }
+        action(R.id.actionScroll) { toggleScroll() }
+        action(R.id.actionAudio) { pickAudio() }
+        action(R.id.actionSecond) { setSecondScreen(!prefs.secondScreen) }
+        action(R.id.actionScreen) { pickScreenMode() }
+        action(R.id.actionHide) { setToolbarHidden(true) }
+        action(R.id.actionUpdates) { maybeCheckForUpdates(force = true) }
+        action(R.id.actionDisconnect) { confirmStop() }
+
+        sheet.setContentView(content)
+        sheet.show()
     }
 
     // ── input modes ───────────────────────────────────────────────────
@@ -752,39 +1054,89 @@ class MainActivity : Activity(), SessionHub.Listener {
         screenView.setPadOptions(prefs.padSpeed, prefs.naturalScroll, prefs.tapToClick)
     }
 
-    private fun pickInputMode() {
-        val modes = arrayOf(
-            getString(R.string.input_touch),
-            getString(R.string.input_touchpad),
+    private fun applyPreset(preset: Preset) {
+        prefs.saveStream(preset.fps, preset.quality, preset.scale)
+        SessionHub.setQuality(preset.fps, preset.quality, preset.scale)
+        toast(getString(R.string.stream_now, preset.fps, preset.quality))
+        refreshSettings()
+    }
+
+    private fun pickQuality() {
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_quality, null)
+        val group = content.findViewById<RadioGroup>(R.id.qualityGroup)
+        val ids = intArrayOf(
+            R.id.quality0,
+            R.id.quality1,
+            R.id.quality2,
+            R.id.quality3,
+            R.id.quality4,
         )
-        val checked = if (prefs.inputMode == "touchpad") 1 else 0
 
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.input_mode_title)
-            .setSingleChoiceItems(modes, checked) { _, which ->
-                prefs.inputMode = if (which == 1) "touchpad" else "touch"
-                applyInputMode()
-                toast(
-                    if (which == 1) getString(R.string.touchpad_hint)
-                    else getString(R.string.touch_hint),
-                )
-            }
-            .setPositiveButton(R.string.done, null)
-            .setNeutralButton(R.string.touchpad_options, null)
-            .create()
-
-        dialog.setOnShowListener {
-            // Neutral is "options"; do not dismiss when it is used.
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                pickTouchpadOptions()
+        val current = captureState
+        val sent = PRESETS.indexOfFirst { it.fps == current?.fps && it.quality == current?.quality }
+        val saved = PRESETS.indexOfFirst { it.fps == prefs.fps && it.quality == prefs.quality }
+        group.check(ids[(if (sent >= 0) sent else saved).coerceAtLeast(0)])
+        group.setOnCheckedChangeListener { _, checked ->
+            val index = ids.indexOf(checked)
+            if (index >= 0) {
+                applyPreset(PRESETS[index])
+                sheet.dismiss()
             }
         }
-        dialog.show()
+
+        sheet.setContentView(content)
+        sheet.show()
+    }
+
+    private fun pickInputMode() {
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_input, null)
+        val group = content.findViewById<RadioGroup>(R.id.inputGroup)
+
+        group.check(
+            if (prefs.inputMode == "touchpad") R.id.inputTouchpad else R.id.inputTouch,
+        )
+        group.setOnCheckedChangeListener { _, checked ->
+            prefs.inputMode = if (checked == R.id.inputTouchpad) "touchpad" else "touch"
+            applyInputMode()
+            refreshSettings()
+        }
+
+        val tap = content.findViewById<SwitchMaterial>(R.id.switchTapToClick)
+        tap.isChecked = prefs.tapToClick
+        tap.setOnCheckedChangeListener { _, checked ->
+            prefs.tapToClick = checked
+            applyInputMode()
+        }
+
+        val natural = content.findViewById<SwitchMaterial>(R.id.switchNaturalScroll)
+        natural.isChecked = prefs.naturalScroll
+        natural.setOnCheckedChangeListener { _, checked ->
+            prefs.naturalScroll = checked
+            applyInputMode()
+            refreshSettings()
+        }
+
+        val speed = content.findViewById<Slider>(R.id.padSpeed)
+        val stops = listOf(1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f, 2.2f, 2.4f)
+        speed.value = stops.minByOrNull { kotlin.math.abs(it - prefs.padSpeed) } ?: 1.6f
+        speed.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                prefs.padSpeed = value
+                applyInputMode()
+            }
+        }
+
+        content.findViewById<Button>(R.id.inputDone).setOnClickListener { sheet.dismiss() }
+        sheet.setContentView(content)
+        sheet.show()
     }
 
     private fun toggleScroll() {
         prefs.naturalScroll = !prefs.naturalScroll
         applyInputMode()
+        refreshSettings()
         toast(
             if (prefs.naturalScroll) getString(R.string.scroll_natural_hint)
             else getString(R.string.scroll_traditional_hint),
@@ -811,142 +1163,78 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
 
     private fun pickAudio() {
-        val group = RadioGroup(this).apply {
-            orientation = RadioGroup.VERTICAL
-        }
-        val machine = RadioButton(this).apply {
-            id = View.generateViewId()
-            text = getString(R.string.audio_machine)
-        }
-        val phone = RadioButton(this).apply {
-            id = View.generateViewId()
-            text = getString(R.string.audio_phone)
-        }
-        group.addView(machine)
-        group.addView(phone)
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_audio, null)
+        val group = content.findViewById<RadioGroup>(R.id.audioGroup)
+        val machine = content.findViewById<com.google.android.material.radiobutton.MaterialRadioButton>(
+            R.id.audioMachine,
+        )
+        val phone = content.findViewById<com.google.android.material.radiobutton.MaterialRadioButton>(
+            R.id.audioPhone,
+        )
+        val mute = content.findViewById<SwitchMaterial>(R.id.switchMuteHost)
 
-        // Check only after the group owns both children. Setting isChecked
-        // before addView() leaves the group without a checked id, and both
-        // buttons end up drawn as selected.
         group.check(if (prefs.audioOnPhone) phone.id else machine.id)
-
-        val mute = CheckBox(this).apply {
-            text = getString(R.string.option_mute_host)
-            isChecked = prefs.muteHost
-            isEnabled = prefs.audioOnPhone
-            setPadding(0, dp(8), 0, 0)
-        }
-        group.setOnCheckedChangeListener { _, checkedId ->
-            mute.isEnabled = checkedId == phone.id
+        mute.isChecked = prefs.muteHost
+        mute.isEnabled = prefs.audioOnPhone
+        group.setOnCheckedChangeListener { _, checked ->
+            mute.isEnabled = checked == phone.id
         }
 
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), 0)
-            addView(group)
-            addView(mute)
+        content.findViewById<Button>(R.id.audioCancel).setOnClickListener { sheet.dismiss() }
+        content.findViewById<Button>(R.id.audioDone).setOnClickListener {
+            val onPhone = group.checkedRadioButtonId == phone.id
+            prefs.audioOnPhone = onPhone
+            prefs.muteHost = mute.isChecked
+            if (onPhone) {
+                startAudio()
+                toast(getString(R.string.audio_hint))
+            } else {
+                stopAudio()
+            }
+            refreshSettings()
+            sheet.dismiss()
         }
 
-        AlertDialog.Builder(this)
-            .setTitle(R.string.audio_title)
-            .setView(layout)
-            .setPositiveButton(R.string.done) { _, _ ->
-                val onPhone = group.checkedRadioButtonId == phone.id
-                prefs.audioOnPhone = onPhone
-                prefs.muteHost = mute.isChecked
-                if (onPhone) {
-                    startAudio()
-                    toast(getString(R.string.audio_hint))
-                } else {
-                    stopAudio()
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun pickTouchpadOptions() {
-        val labels = arrayOf(
-            getString(R.string.option_tap_to_click),
-            getString(R.string.option_natural_scroll),
-        )
-        val checked = booleanArrayOf(prefs.tapToClick, prefs.naturalScroll)
-
-        AlertDialog.Builder(this)
-            .setTitle(R.string.touchpad_options)
-            .setMultiChoiceItems(labels, checked) { _, which, value ->
-                when (which) {
-                    0 -> prefs.tapToClick = value
-                    1 -> prefs.naturalScroll = value
-                }
-                applyInputMode()
-            }
-            .setPositiveButton(R.string.done, null)
-            .setNeutralButton(R.string.pointer_speed) { _, _ -> pickPadSpeed() }
-            .show()
-    }
-
-    private fun pickPadSpeed() {
-        val labels = arrayOf(
-            getString(R.string.speed_slow),
-            getString(R.string.speed_normal),
-            getString(R.string.speed_fast),
-        )
-        val speeds = floatArrayOf(1.0f, 1.6f, 2.4f)
-        val checked = speeds.indexOfFirst { kotlin.math.abs(it - prefs.padSpeed) < 0.05f }
-            .coerceAtLeast(1)
-
-        AlertDialog.Builder(this)
-            .setTitle(R.string.pointer_speed)
-            .setSingleChoiceItems(labels, checked) { _, which ->
-                prefs.padSpeed = speeds[which]
-                applyInputMode()
-            }
-            .setPositiveButton(R.string.done, null)
-            .show()
+        sheet.setContentView(content)
+        sheet.show()
     }
 
     private fun pickKeys() {
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_keys, null)
+        val group = content.findViewById<ChipGroup>(R.id.keysGroup)
         val selected = prefs.keyList.ifEmpty { DEFAULT_KEYS }.toMutableSet()
-        val labels = KEY_CATALOG.map { it.label }.toTypedArray()
-        val checked = KEY_CATALOG.map { it.name in selected }.toBooleanArray()
 
-        AlertDialog.Builder(this)
-            .setTitle(R.string.pick_keys)
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                val name = KEY_CATALOG[which].name
-                if (isChecked) selected.add(name) else selected.remove(name)
+        fun fill(checked: Set<String>) {
+            group.removeAllViews()
+            for (def in KEY_CATALOG) {
+                val chip = layoutInflater.inflate(R.layout.item_key_chip, group, false) as Chip
+                chip.text = def.label
+                chip.isChecked = def.name in checked
+                chip.setOnCheckedChangeListener { _, on ->
+                    if (on) selected.add(def.name) else selected.remove(def.name)
+                }
+                group.addView(chip)
             }
-            .setPositiveButton(R.string.done) { _, _ ->
-                prefs.keys = KEY_CATALOG.filter { it.name in selected }
-                    .joinToString(",") { it.name }
-                buildToolbar()
-            }
-            .setNeutralButton(R.string.reset_default) { _, _ ->
-                prefs.keys = DEFAULT_KEYS.joinToString(",")
-                buildToolbar()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
+        }
+        fill(selected)
 
-    private fun pickQuality() {
-        val current = captureState
-        val checked = PRESETS.indexOfFirst {
-            it.fps == current?.fps && it.quality == current?.quality
-        }.coerceAtLeast(0)
+        content.findViewById<Button>(R.id.keysReset).setOnClickListener {
+            selected.clear()
+            selected.addAll(DEFAULT_KEYS)
+            fill(selected)
+        }
+        content.findViewById<Button>(R.id.keysDone).setOnClickListener {
+            prefs.keys = KEY_CATALOG.filter { it.name in selected }
+                .joinToString(",") { it.name }
+            buildToolbar()
+            refreshSettings()
+            sheet.dismiss()
+        }
 
-        AlertDialog.Builder(this)
-            .setTitle(R.string.quality_title)
-            .setSingleChoiceItems(PRESETS.map { it.label }.toTypedArray(), checked) { dialog, which ->
-                val preset = PRESETS[which]
-                prefs.saveStream(preset.fps, preset.quality, preset.scale)
-                SessionHub.setQuality(preset.fps, preset.quality, preset.scale)
-                toast(getString(R.string.stream_now, preset.fps, preset.quality))
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        sheet.setContentView(content)
+        sheet.show()
     }
 
     private fun startHealthCheck() {
@@ -1020,29 +1308,31 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
 
     private fun pickScreenMode() {
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.sheet_screen, null)
+        val group = content.findViewById<RadioGroup>(R.id.screenGroup)
+        val ids = intArrayOf(R.id.screenFit, R.id.screenFill, R.id.screenStretch)
         val values = arrayOf("fit", "fill", "stretch")
-        val labels = arrayOf(
-            getString(R.string.screen_fit),
-            getString(R.string.screen_fill),
-            getString(R.string.screen_stretch),
-        )
-        val hints = arrayOf(
+        val hints = intArrayOf(
             R.string.screen_fit_hint,
             R.string.screen_fill_hint,
             R.string.screen_stretch_hint,
         )
-        val checked = values.indexOf(prefs.screenMode).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
-            .setTitle(R.string.screen_mode_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                prefs.screenMode = values[which]
+        group.check(ids[values.indexOf(prefs.screenMode).coerceAtLeast(0)])
+        group.setOnCheckedChangeListener { _, checked ->
+            val index = ids.indexOf(checked)
+            if (index >= 0) {
+                prefs.screenMode = values[index]
                 applyScreenMode()
-                toast(getString(hints[which]))
-                dialog.dismiss()
+                toast(getString(hints[index]))
+                refreshSettings()
+                sheet.dismiss()
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        }
+
+        sheet.setContentView(content)
+        sheet.show()
     }
 
     // ── finding the host ──────────────────────────────────────────────
@@ -1078,21 +1368,12 @@ class MainActivity : Activity(), SessionHub.Listener {
         discoveredList.removeAllViews()
 
         for (host in hosts) {
-            val row = TextView(this).apply {
-                text = "${host.name} · ${host.address}:${host.port}"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(ContextCompat.getColor(context, R.color.text))
-                setPadding(dp(14), dp(12), dp(14), dp(12))
-                background = getDrawable(R.drawable.bg_chip)
-                isClickable = true
-                setOnClickListener { useDiscovered(host) }
-            }
-            val params = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            )
-            params.bottomMargin = dp(6)
-            row.layoutParams = params
+            val row = layoutInflater.inflate(R.layout.item_host, discoveredList, false)
+            row.findViewById<TextView>(R.id.hostName).text =
+                host.name.ifBlank { host.address }
+            row.findViewById<TextView>(R.id.hostAddress).text =
+                "${host.address}:${host.port}"
+            row.setOnClickListener { useDiscovered(host) }
             discoveredList.addView(row)
         }
     }
@@ -1113,19 +1394,28 @@ class MainActivity : Activity(), SessionHub.Listener {
         }
     }
 
-    private fun toggleSecondScreen() {
-        if (prefs.secondScreen) {
-            prefs.secondScreen = false
-            SessionHub.setDisplay("mirror", 0, 0)
-            toast(getString(R.string.mirroring_again))
+    private fun setSecondScreen(enabled: Boolean) {
+        if (prefs.secondScreen == enabled) {
+            refreshSettings()
             return
         }
 
-        val (width, height) = phoneTarget()
+        if (!enabled) {
+            prefs.secondScreen = false
+            if (SessionHub.isLive) SessionHub.setDisplay("mirror", 0, 0)
+            toast(getString(R.string.mirroring_again))
+            refreshSettings()
+            return
+        }
+
         prefs.secondScreen = true
-        awaitingExtend = true
-        SessionHub.setDisplay("extend", width, height)
-        toast(getString(R.string.second_screen_asking, width, height))
+        if (SessionHub.isLive) {
+            val (width, height) = phoneTarget()
+            awaitingExtend = true
+            SessionHub.setDisplay("extend", width, height)
+            toast(getString(R.string.second_screen_asking, width, height))
+        }
+        refreshSettings()
     }
 
     /**
@@ -1161,8 +1451,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     private fun updateModifierChips() {
         for ((name, view) in modifierChips) {
             val active = name in mods
-            view.isSelected = active
-            view.setTextColor(ContextCompat.getColor(this, if (active) R.color.on_accent else R.color.text))
+            view.isChecked = active
         }
     }
 
@@ -1176,6 +1465,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             keySink.clearFocus()
         } else {
             keySink.requestFocus()
+            ui.removeCallbacks(hideToolbarRunnable)
             // Older IMEs ignore the request while the window is still settling.
             keySink.postDelayed(
                 { imm.showSoftInput(keySink, InputMethodManager.SHOW_IMPLICIT) },
@@ -1211,21 +1501,28 @@ class MainActivity : Activity(), SessionHub.Listener {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (remotePanel.visibility == View.VISIBLE) {
-            // Keep the session; it lives in the foreground service.
-            moveTaskToBack(true)
-            if (!backgroundHintShown) {
-                backgroundHintShown = true
-                toast(getString(R.string.background_hint))
+        when {
+            remotePanel.visibility == View.VISIBLE -> {
+                // Keep the session; it lives in the foreground service.
+                moveTaskToBack(true)
+                if (!backgroundHintShown) {
+                    backgroundHintShown = true
+                    toast(getString(R.string.background_hint))
+                }
             }
-        } else {
-            super.onBackPressed()
+
+            bottomNav.selectedItemId != R.id.nav_home -> {
+                bottomNav.selectedItemId = R.id.nav_home
+            }
+
+            else -> super.onBackPressed()
         }
     }
 
     override fun onResume() {
         super.onResume()
         resumed = true
+        refreshSettings()
         if (!SessionHub.isLive) startDiscovery()
         // Frames were paused while we were away; ask for them again.
         SessionHub.setVisible(true)
@@ -1242,6 +1539,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         // No point decoding or transferring frames nobody can see.
         SessionHub.setVisible(false)
         stopHealthCheck()
+        ui.removeCallbacks(hideToolbarRunnable)
         if (::keySink.isInitialized) hideKeyboard()
     }
 
@@ -1285,6 +1583,9 @@ class MainActivity : Activity(), SessionHub.Listener {
         const val SCAN_REQUEST = 42
         const val REQUEST_NOTIFICATIONS = 43
         const val HEALTH_INTERVAL = 5_000L
+
+        /** How long the session pill stays visible without a touch. */
+        const val TOOLBAR_TIMEOUT = 4_500L
 
         /** At most one GitHub request every six hours unless asked explicitly. */
         const val UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000L

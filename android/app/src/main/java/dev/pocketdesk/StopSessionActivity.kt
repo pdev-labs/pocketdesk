@@ -1,8 +1,8 @@
 package dev.pocketdesk
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.os.Bundle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.pocketdesk.service.RemoteService
 import dev.pocketdesk.session.SessionHub
 
@@ -22,7 +22,7 @@ class StopSessionActivity : Activity() {
             return
         }
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.stop_title)
             .setMessage(getString(R.string.stop_message, SessionHub.target))
             .setPositiveButton(R.string.stop_confirm) { _, _ ->
