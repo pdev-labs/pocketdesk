@@ -94,6 +94,23 @@ jobs:
             exit 1
           }
 
+      - name: Lint for API calls above minSdk 21
+        shell: bash
+        working-directory: android
+        run: |
+          gradle --no-daemon lintRelease >/dev/null 2>&1 || true
+          report=app/build/reports/lint-results-release.txt
+          if [ ! -f "$report" ]; then
+            echo "::warning::lint produced no report"
+            exit 0
+          fi
+          if grep -q "\[NewApi\]" "$report"; then
+            grep -B3 -A4 "\[NewApi\]" "$report" | head -120
+            echo "::error::Some calls need a higher API level than 21"
+            exit 1
+          fi
+          echo "No NewApi findings."
+
       - name: Collect APKs
         run: |
           mkdir -p out
