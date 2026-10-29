@@ -98,7 +98,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
     private var discoveredHosts: List<Discovery.Host> = emptyList()
     private val discoveryTimeout = Runnable {
-        if (discoveredHosts.isEmpty()) {
+        if (!isFinishing && !isDestroyed && discoveredHosts.isEmpty()) {
             discoveryStatus.text = getString(R.string.discovery_none)
         }
     }
@@ -1056,6 +1056,7 @@ class MainActivity : Activity(), SessionHub.Listener {
     }
 
     private fun renderDiscovered(hosts: List<Discovery.Host>) {
+        if (isFinishing || isDestroyed) return
         discoveredHosts = hosts
         if (hosts.isEmpty()) {
             discoveredList.visibility = View.GONE
