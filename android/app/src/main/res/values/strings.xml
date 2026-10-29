@@ -92,8 +92,16 @@
     <string name="update_session_title">Update available</string>
     <string name="update_session_message">PocketDesk %1$s is ready to download. Installing it closes this remote session.</string>
     <string name="update_session_confirm">Stop session &amp; install</string>
-    <string name="menu_fill">Fill screen (crop sides)</string>
-    <string name="menu_fit">Fit screen (black bars)</string>
+    <string name="menu_screen_fit">Screen: fit (black bars)</string>
+    <string name="menu_screen_fill">Screen: fill (crop sides)</string>
+    <string name="menu_screen_stretch">Screen: stretch</string>
+    <string name="screen_mode_title">Screen size</string>
+    <string name="screen_fit">Fit — whole desktop, black bars</string>
+    <string name="screen_fill">Fill — crop the sides, keep proportions</string>
+    <string name="screen_stretch">Stretch — fill exactly, may distort</string>
+    <string name="screen_fit_hint">Fit: the whole desktop is visible.</string>
+    <string name="screen_fill_hint">Fill: sides cropped, no black bars.</string>
+    <string name="screen_stretch_hint">Stretch: the desktop fills the phone exactly.</string>
     <string name="menu_check_updates">Check for updates</string>
     <string name="second_screen_needs_host">The host could not create a virtual monitor. Second-screen mode needs Hyprland; mirroring still works.</string>
 

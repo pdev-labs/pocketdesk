@@ -39,6 +39,9 @@ class ScreenView @JvmOverloads constructor(
 
     enum class InputMode { TOUCH, TOUCHPAD }
 
+    /** `FIT` letterboxes, `FILL` crops, `STRETCH` distorts to the display. */
+    enum class DisplayMode { FIT, FILL, STRETCH }
+
     // Absolute pointer (direct touch).
     var onMove: ((Float, Float) -> Unit)? = null
     // Relative pointer (touchpad).
@@ -57,8 +60,7 @@ class ScreenView @JvmOverloads constructor(
 
     private var frame: Bitmap? = null
 
-    /** Fill crops the sides instead of showing black bars. */
-    private var fill = false
+    private var displayMode = DisplayMode.FIT
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
     private val destination = RectF()
     private val density = resources.displayMetrics.density
@@ -118,14 +120,13 @@ class ScreenView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun setFill(value: Boolean) {
-        if (fill == value) return
-        fill = value
+    fun setDisplayMode(value: DisplayMode) {
+        if (displayMode == value) return
+        displayMode = value
         invalidate()
     }
 
-    val isFilling: Boolean
-        get() = fill
+    fun displayMode(): DisplayMode = displayMode
 
     fun setInputMode(value: InputMode) {
         if (inputMode == value) return
@@ -147,7 +148,15 @@ class ScreenView @JvmOverloads constructor(
         val bitmap = frame ?: return
         if (bitmap.width <= 0 || bitmap.height <= 0 || width == 0 || height == 0) return
 
-        val scale = if (fill) {
+        if (displayMode == DisplayMode.STRETCH) {
+            // Exactly the view, aspect ratio be damned. Touch mapping still
+            // works because `destination` covers the whole view.
+            destination.set(0f, 0f, width.toFloat(), height.toFloat())
+            canvas.drawBitmap(bitmap, null, destination, paint)
+            return
+        }
+
+        val scale = if (displayMode == DisplayMode.FILL) {
             // Cover: the frame is scaled until it covers the view; the excess is
             // cropped, and touch mapping already works against `destination`.
             max(width.toFloat() / bitmap.width, height.toFloat() / bitmap.height)
