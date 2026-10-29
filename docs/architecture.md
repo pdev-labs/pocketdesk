@@ -22,6 +22,25 @@ PocketDesk is deliberately small: one Rust daemon on the computer, one Kotlin ap
 
 Everything is `tokio`, except the capture and ffmpeg-reader threads, which are blocking by nature.
 
+## Transports: LAN, USB and discovery
+
+The WebSocket is transport-agnostic — only the address the phone dials changes.
+
+* **LAN** — the app connects to the host's address directly (or through
+  Tailscale/WireGuard when away from home).
+* **USB** — the host runs `adb reverse tcp:8765 tcp:8765` for every attached
+  device and re-checks every 10 seconds, so a replug needs no host restart. The
+  phone then dials `127.0.0.1:8765`; from the server's point of view the peer is
+  loopback, which is how it labels the session `USB` in the log. `--no-usb`
+  disables the automatic setup. Because the pipe is short and lossless, the app
+  raises its preset to 30 fps/q90 and asks for a 2400 px virtual monitor instead
+  of 1600.
+* **Discovery** — the host broadcasts a JSON beacon on UDP 8766 every three
+  seconds (`app`, `name`, `port`, `version`) and answers `{"t":"discover"}`
+  probes immediately. The app lists machines while the connect screen is
+  visible and uses the packet's source address, not a self-reported one. The
+  pairing token is never broadcast; discovery only saves typing an IP.
+
 ## Why JPEG instead of H.264
 
 H.264 would cut bandwidth 3–5×, but it brings a codec pipeline (SPS/PPS, timestamps, decoder surface management) and hides latency in a bitrate buffer. JPEG gives:

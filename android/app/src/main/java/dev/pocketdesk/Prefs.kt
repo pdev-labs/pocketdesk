@@ -30,6 +30,20 @@ class Prefs(context: Context) {
             store.edit().putString("token", value).apply()
         }
 
+    /** Last non-USB (Wi-Fi/LAN) address, kept when USB mode stores localhost. */
+    var wifiHost: String
+        get() = store.getString("wifi_host", "") ?: ""
+        set(value) {
+            store.edit().putString("wifi_host", value).apply()
+        }
+
+    /** Connect over the USB cable (127.0.0.1 through `adb reverse`). */
+    var usbCable: Boolean
+        get() = store.getBoolean("usb_cable", false)
+        set(value) {
+            store.edit().putBoolean("usb_cable", value).apply()
+        }
+
     /** Friendly machine name from the QR, e.g. `arch`. */
     var name: String
         get() = store.getString("name", "") ?: ""

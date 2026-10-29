@@ -28,11 +28,15 @@
 
     <string name="stream_now">Streaming at %1$d fps · quality %2$d</string>
     <string name="mode_second_screen">2nd screen</string>
+    <string name="mode_usb">USB</string>
+    <string name="usb_cable">USB cable (fast)</string>
     <string name="discovery_looking">Looking for your computer…</string>
     <string name="discovery_none">No computer found. Make sure both are on the same Wi-Fi, or scan the QR code.</string>
     <string name="discovery_found">FOUND ON THIS NETWORK</string>
     <string name="discovery_again">Search again</string>
     <string name="discovery_selected">Found %1$s — enter the code shown on the host.</string>
+    <string name="usb_quality">USB cable: 30 fps · q90, and a larger second screen.</string>
+    <string name="usb_hint">Plug in the cable with USB debugging on. The host forwards its port over ADB, so the app connects to 127.0.0.1 — much faster and more stable than Wi-Fi.</string>
 
     <string name="menu_keys">Choose keys…</string>
     <string name="menu_quality">Quality &amp; frame rate…</string>

@@ -12,6 +12,7 @@ mod protocol;
 mod second_screen;
 mod server;
 mod throttle;
+mod usb;
 
 use std::{
     io::IsTerminal,
@@ -178,7 +179,15 @@ async fn main() -> Result<()> {
         });
     }
 
-    banner(&cfg, &state, &token);
+    let usb_ready = if cfg.no_usb {
+        0
+    } else {
+        let ready = usb::setup(cfg.port);
+        usb::monitor(cfg.port);
+        ready
+    };
+
+    banner(&cfg, &state, &token, usb_ready);
 
     let app = server::router(state.clone());
     let listener = tokio::net::TcpListener::bind((cfg.bind.as_str(), cfg.port))
@@ -261,7 +270,7 @@ pub fn refresh_geometry(state: &AppState) {
     }
 }
 
-fn banner(cfg: &Config, state: &AppState, token: &str) {
+fn banner(cfg: &Config, state: &AppState, token: &str, usb_ready: usize) {
     let address = if cfg.bind == "127.0.0.1" || cfg.bind == "localhost" {
         "127.0.0.1".to_string()
     } else {
@@ -312,6 +321,14 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
     println!("  display  {display}");
     println!("  mode     {mode}");
     println!("  server   http://{address}:{}", cfg.port);
+    if usb_ready > 0 {
+        println!(
+            "  usb      127.0.0.1:{} over adb reverse ({} device{})",
+            cfg.port,
+            usb_ready,
+            if usb_ready == 1 { "" } else { "s" }
+        );
+    }
     println!("  code     {}", config::pretty_token(token));
     println!("  input    {input}");
     println!();
@@ -339,6 +356,6 @@ fn banner(cfg: &Config, state: &AppState, token: &str) {
 
     println!("  Phone app → scan the QR, or enter {address}:{} and the code above.", cfg.port);
     println!("  In the app: ⋯ for quality, keys and \"Use phone as second screen\".");
-    println!("  Stay on your LAN, or reach it from anywhere over Tailscale/WireGuard.");
+    println!("  Wi-Fi: stay on your LAN, or use Tailscale/WireGuard. Cable: tick \"USB cable\" in the app.");
     println!();
 }
