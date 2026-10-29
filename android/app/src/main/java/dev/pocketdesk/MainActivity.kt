@@ -1081,7 +1081,7 @@ class MainActivity : Activity(), SessionHub.Listener {
             val row = TextView(this).apply {
                 text = "${host.name} · ${host.address}:${host.port}"
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(ContextCompat.getColor(this, R.color.text))
+                setTextColor(ContextCompat.getColor(context, R.color.text))
                 setPadding(dp(14), dp(12), dp(14), dp(12))
                 background = getDrawable(R.drawable.bg_chip)
                 isClickable = true
