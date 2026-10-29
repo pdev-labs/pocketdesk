@@ -889,11 +889,11 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         val container = themeColor(com.google.android.material.R.attr.colorSurfaceVariant)
         val onSurface = themeColor(com.google.android.material.R.attr.colorOnSurface)
 
-        val button = MaterialButton(
-            this,
-            null,
-            com.google.android.material.R.attr.materialButtonTonalStyle,
-        )
+        val button = layoutInflater.inflate(
+            R.layout.item_toolbar_chip,
+            toolbarButtons,
+            false,
+        ) as MaterialButton
         button.text = label
         button.textSize = 12f
         button.isAllCaps = false
