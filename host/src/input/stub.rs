@@ -59,7 +59,7 @@ impl Device {
         Ok(())
     }
 
-    pub fn type_text(&mut self, _text: &str) -> Result<()> {
+    pub fn type_text_with(&mut self, _text: &str, _mods: &[String]) -> Result<()> {
         Ok(())
     }
 }
