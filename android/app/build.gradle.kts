@@ -15,8 +15,8 @@ android {
         applicationId = "dev.pocketdesk"
         minSdk = 26
         targetSdk = 35
-        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 15
-        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.6.3"
+        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 16
+        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.7.0"
     }
 
     if (!ciKeystore.isNullOrBlank()) {

@@ -21,6 +21,8 @@ use serde::Deserialize;
 pub const OUTPUT_NAME: &str = "pocketdesk-phone";
 
 pub struct VirtualDisplay {
+    /// Output name, e.g. `pocketdesk-phone-2` for a second phone.
+    name: String,
     pub width: u32,
     pub height: u32,
     /// True when a phone asked for it and it should go away when that phone
@@ -30,13 +32,26 @@ pub struct VirtualDisplay {
 }
 
 impl VirtualDisplay {
-    /// Create (or resize) the headless output and wait until the compositor
-    /// reports it at the requested size.
+    /// The shared virtual monitor used by `--extend`.
     pub fn create(requested_w: u32, requested_h: u32, on_demand: bool) -> Result<Self> {
+        Self::create_named(OUTPUT_NAME, requested_w, requested_h, on_demand)
+    }
+
+    /// Create (or resize) a headless output and wait until the compositor
+    /// reports it at the requested size.
+    ///
+    /// Every phone that asks for a second screen gets its own name, so two
+    /// extended phones are two independent monitors rather than one shared one.
+    pub fn create_named(
+        name: &str,
+        requested_w: u32,
+        requested_h: u32,
+        on_demand: bool,
+    ) -> Result<Self> {
         let width = even(requested_w.clamp(480, 3840));
         let height = even(requested_h.clamp(320, 2160));
 
-        match run(&["output", "create", "headless", OUTPUT_NAME]) {
+        match run(&["output", "create", "headless", name]) {
             Ok(_) => {}
             Err(err) => {
                 // A leftover output from a crashed run is fine: reuse it.
@@ -49,13 +64,13 @@ impl VirtualDisplay {
             }
         }
 
-        apply_mode(width, height)?;
+        apply_mode(name, width, height)?;
 
         let deadline = Instant::now() + Duration::from_secs(4);
         loop {
             let found = monitors()?
                 .into_iter()
-                .find(|m| m.name.eq_ignore_ascii_case(OUTPUT_NAME));
+                .find(|m| m.name.eq_ignore_ascii_case(name));
 
             if let Some(monitor) = found {
                 if monitor.width >= width && monitor.height >= height {
@@ -65,19 +80,25 @@ impl VirtualDisplay {
             if Instant::now() >= deadline {
                 bail!(
                     "the virtual monitor did not come up in time — check \
-                     `hyprctl monitors` for {OUTPUT_NAME}"
+                     `hyprctl monitors` for {name}"
                 );
             }
             sleep(Duration::from_millis(120));
         }
 
-        tracing::info!("virtual monitor {OUTPUT_NAME} ready: {width}x{height} (second screen)");
+        tracing::info!("virtual monitor {name} ready: {width}x{height} (second screen)");
         Ok(Self {
+            name: name.to_string(),
             width,
             height,
             on_demand,
             present: true,
         })
+    }
+
+    /// The output name, for `grim -o` and `layout::detect`.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Remove the output. Safe to call twice.
@@ -86,9 +107,9 @@ impl VirtualDisplay {
             return;
         }
         self.present = false;
-        match run(&["output", "remove", OUTPUT_NAME]) {
-            Ok(_) => tracing::info!("virtual monitor {OUTPUT_NAME} removed"),
-            Err(err) => tracing::warn!("could not remove {OUTPUT_NAME}: {err:#}"),
+        match run(&["output", "remove", &self.name]) {
+            Ok(_) => tracing::info!("virtual monitor {} removed", self.name),
+            Err(err) => tracing::warn!("could not remove {}: {err:#}", self.name),
         }
     }
 }
@@ -99,25 +120,20 @@ impl Drop for VirtualDisplay {
     }
 }
 
-fn apply_mode(width: u32, height: u32) -> Result<()> {
+fn apply_mode(name: &str, width: u32, height: u32) -> Result<()> {
     let mode = format!("{width}x{height}");
 
     // Hyprland 0.5x+ (Lua config).
-    let lua = format!(
-        r#"hl.monitor({{output="{OUTPUT_NAME}", mode="{mode}", position="auto-right", scale=1}})"#
-    );
+    let lua =
+        format!(r#"hl.monitor({{output="{name}", mode="{mode}", position="auto-right", scale=1}})"#);
     if run(&["eval", &lua]).is_ok() {
         return Ok(());
     }
 
     // Older Hyprland (legacy config parser).
-    match run(&[
-        "keyword",
-        "monitor",
-        &format!("{OUTPUT_NAME},{mode},auto-right,1"),
-    ]) {
+    match run(&["keyword", "monitor", &format!("{name},{mode},auto-right,1")]) {
         Ok(_) => Ok(()),
-        Err(err) => bail!("could not size {OUTPUT_NAME}: {err:#}"),
+        Err(err) => bail!("could not size {name}: {err:#}"),
     }
 }
 

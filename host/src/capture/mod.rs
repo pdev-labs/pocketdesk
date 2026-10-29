@@ -15,7 +15,7 @@ pub mod test_pattern;
 
 use std::{
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
@@ -136,12 +136,18 @@ fn has_command(cmd: &str) -> bool {
         .is_ok()
 }
 
+/// Start a capture thread.
+///
+/// `stop` lets the owner shut the thread down; without it a thread whose
+/// receiver went away would idle forever (each extended phone starts one, and
+/// phones come and go).
 pub fn spawn(
     plan: CapturePlan,
     settings: Arc<RwLock<CaptureSettings>>,
     tx: broadcast::Sender<Arc<Frame>>,
     fps_x10: Arc<AtomicU32>,
     latest: SharedFrame,
+    stop: Arc<AtomicBool>,
 ) -> Result<CaptureInfo> {
     let backend_name = match plan.backend {
         Backend::Grim => "grim (wayland)",
@@ -158,7 +164,7 @@ pub fn spawn(
 
     std::thread::Builder::new()
         .name("pocketdesk-capture".to_string())
-        .spawn(move || capture_loop(plan, settings, tx, fps_x10, latest))
+        .spawn(move || capture_loop(plan, settings, tx, fps_x10, latest, stop))
         .map_err(|e| anyhow::anyhow!("spawning capture thread: {e}"))?;
 
     Ok(info)
@@ -179,6 +185,7 @@ fn capture_loop(
     tx: broadcast::Sender<Arc<Frame>>,
     fps_x10: Arc<AtomicU32>,
     latest: SharedFrame,
+    stop: Arc<AtomicBool>,
 ) {
     let mut backend: Option<Box<dyn Capture>> = None;
     let mut applied: Option<CaptureSettings> = None;
@@ -190,6 +197,11 @@ fn capture_loop(
     let mut frames = 0u32;
 
     loop {
+        if stop.load(Ordering::Relaxed) {
+            tracing::debug!("capture thread stopped");
+            return;
+        }
+
         // Nobody is watching: do not burn CPU on screenshots.
         if tx.receiver_count() == 0 {
             fps_x10.store(0, Ordering::Relaxed);
