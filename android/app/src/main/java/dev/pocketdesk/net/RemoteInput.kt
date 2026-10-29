@@ -57,9 +57,18 @@ object RemoteInput {
         return message.toString()
     }
 
-    fun text(value: String): String =
-        JSONObject()
+    /**
+     * Typed characters. `mods` (super/ctrl/alt/shift) are held around each
+     * character on the host, so the soft keyboard can send combos such as
+     * Super+S and Ctrl+C, not just plain text.
+     */
+    fun text(value: String, mods: Collection<String> = emptyList()): String {
+        val message = JSONObject()
             .put("t", "text")
             .put("s", value)
-            .toString()
+        if (mods.isNotEmpty()) {
+            message.put("mods", JSONArray(mods.toList()))
+        }
+        return message.toString()
+    }
 }

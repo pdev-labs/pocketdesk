@@ -85,11 +85,22 @@ impl Input {
                 action,
             } => {
                 // `shift`, `ctrl`, … are valid key names too (the protocol
-                // documents `{"t":"key","name":"shift","action":"down"}`).
-                let code = keys::by_name(name)
-                    .or_else(|| keys::modifier(name))
-                    .ok_or_else(|| anyhow::anyhow!("unknown key name `{name}`"))?;
-                let mods: Vec<u16> = mods.iter().filter_map(|m| keys::modifier(m)).collect();
+                // documents `{"t":"key","name":"shift","action":"down"}`), and
+                // so is any single printable character ("s", "?", "7").
+                let (code, implicit_shift) = if let Some(code) = keys::by_name(name) {
+                    (code, false)
+                } else if let Some(code) = keys::modifier(name) {
+                    (code, false)
+                } else if let Some((code, shift)) = keys::by_char(name) {
+                    (code, shift)
+                } else {
+                    anyhow::bail!("unknown key name `{name}`");
+                };
+                let mut mods: Vec<u16> =
+                    mods.iter().filter_map(|m| keys::modifier(m)).collect();
+                if implicit_shift && !mods.contains(&keys::KEY_LEFTSHIFT) {
+                    mods.insert(0, keys::KEY_LEFTSHIFT);
+                }
                 match action.unwrap_or(KeyAction::Tap) {
                     KeyAction::Tap => self.dev.tap_with_mods(&mods, code),
                     KeyAction::Down => {
@@ -102,7 +113,7 @@ impl Input {
                     }
                 }
             }
-            ClientMsg::Text { s } => self.dev.type_text(s),
+            ClientMsg::Text { s, mods } => self.dev.type_text_with(s, mods),
             ClientMsg::Ping => Ok(()),
             // Handled by the server before input injection: they change the
             // stream, not the desktop.

@@ -196,6 +196,10 @@ jobs:
             click, and pointer speed are configurable. Natural or traditional scrolling
             is its own session-menu toggle and applies to both input modes.
 
+            **Keyboard combos** — the toolbar's Super/Ctrl/Alt/Shift chips now apply to
+            the phone's own keyboard too: tap Super, type `s`, and the host gets `Super+S`.
+            The chips stay latched until you tap them off.
+
             **Audio to the phone** — ⋯ → Audio output streams this machine's sound to the
             phone (PCM 48 kHz stereo) over a separate socket, so it keeps playing in the
             background. The host's own speakers can be muted while the phone listens, and

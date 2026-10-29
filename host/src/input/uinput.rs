@@ -270,6 +270,16 @@ impl Device {
             // Partial writes are silently dropped events otherwise.
             bail!("short uinput write: {written} of {bytes} bytes");
         }
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let keys: Vec<String> = events
+                .iter()
+                .filter(|e| e.type_ == EV_KEY)
+                .map(|e| format!("{}={}", e.code, e.value))
+                .collect();
+            if !keys.is_empty() {
+                tracing::debug!(keys = %keys.join(" "), "uinput keys");
+            }
+        }
         tracing::trace!(fd = self.fd, events = events.len(), "uinput write");
         Ok(())
     }
@@ -408,21 +418,53 @@ impl Device {
         Ok(())
     }
 
-    pub fn type_text(&mut self, text: &str) -> Result<()> {
+    /// Type `text` while holding `mods` (names such as `super`, `ctrl`).
+    ///
+    /// A soft keyboard commits one character at a time, so without this the
+    /// toolbar's modifier chips had nothing to attach to and Super+S from the
+    /// phone's keyboard arrived as a plain "s".
+    pub fn type_text_with(&mut self, text: &str, mods: &[String]) -> Result<()> {
+        let held: Vec<u16> = mods.iter().filter_map(|m| keys::modifier(m)).collect();
+        let shift_held = held.contains(&keys::KEY_LEFTSHIFT)
+            || held.contains(&keys::KEY_RIGHTSHIFT);
+
+        for modifier in &held {
+            self.emit(&[event(EV_KEY, *modifier, 1)])?;
+        }
+        if !held.is_empty() {
+            self.sync()?;
+        }
+
+        let result = self.type_chars(text, shift_held);
+
+        // Release even if a character failed, so no modifier stays stuck down.
+        for modifier in held.iter().rev() {
+            let _ = self.emit(&[event(EV_KEY, *modifier, 0)]);
+        }
+        if !held.is_empty() {
+            let _ = self.sync();
+        }
+        result
+    }
+
+    fn type_chars(&mut self, text: &str, shift_held: bool) -> Result<()> {
         for ch in text.chars() {
             let Some((code, needs_shift)) = keys::for_char(ch) else {
                 tracing::debug!("skipping unsupported character {ch:?}");
                 continue;
             };
 
+            // Shift may already be one of the held modifiers.
+            let press_shift = needs_shift && !shift_held;
+
             let mut events = Vec::with_capacity(8);
-            if needs_shift {
+            if press_shift {
                 events.push(event(EV_KEY, keys::KEY_LEFTSHIFT, 1));
             }
             events.push(event(EV_KEY, code, 1));
             events.push(event(EV_SYN, SYN_REPORT, 0));
             events.push(event(EV_KEY, code, 0));
-            if needs_shift {
+            if press_shift {
                 events.push(event(EV_KEY, keys::KEY_LEFTSHIFT, 0));
             }
             events.push(event(EV_SYN, SYN_REPORT, 0));

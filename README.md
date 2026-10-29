@@ -253,6 +253,11 @@ The toolbar is yours. **⋯** in the toolbar opens the session menu:
 
 There is no fixed limit on how many keys you tick; the row scrolls sideways.
 
+The modifier chips combine with the phone's own keyboard, not just the toolbar
+keys: tap **Super** (or Ctrl/Alt/Shift) so it lights up, then type `s` on the
+Google keyboard and the host receives `Super+S`. Shift works the same way, and
+the chips stay latched until you tap them again, so Shift can cover a whole word.
+
 ## Use the phone as a second screen
 
 Mirroring copies the laptop panel. *Second screen* instead asks the host for a

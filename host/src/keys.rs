@@ -90,6 +90,19 @@ fn digit(c: char) -> Option<u16> {
     }
 }
 
+/// A key name that is a single printable character, e.g. `"s"` or `"S"`.
+///
+/// Lets a client send `{"t":"key","name":"c","mods":["ctrl"]}` instead of
+/// going through the text path, which is what soft keyboards use for combos.
+pub fn by_char(name: &str) -> Option<(u16, bool)> {
+    let mut chars = name.chars();
+    let c = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    for_char(c)
+}
+
 /// Named keys, as typed by the phone's toolbar.
 pub fn by_name(name: &str) -> Option<u16> {
     let name = name.trim().to_ascii_lowercase();
@@ -257,5 +270,12 @@ mod tests {
         assert_eq!(by_name("f12"), Some(88));
         assert_eq!(modifier("Super"), Some(125));
         assert_eq!(by_name("nope"), None);
+        assert_eq!(by_char("s"), Some((31, false)));
+        assert_eq!(by_char("S"), Some((31, true)));
+        assert_eq!(by_char("7"), Some((8, false)));
+        assert_eq!(by_char("?"), Some((53, true)));
+        assert_eq!(by_char("ab"), None);
+        assert_eq!(by_char(""), None);
+        assert_eq!(by_char("é"), None);
     }
 }

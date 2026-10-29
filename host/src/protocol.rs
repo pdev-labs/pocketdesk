@@ -44,7 +44,13 @@ pub enum ClientMsg {
         action: Option<KeyAction>,
     },
     /// Type a string using the US layout (shift is handled automatically).
-    Text { s: String },
+    /// `mods` are held around every character, so a soft keyboard can send
+    /// Super+S or Ctrl+C: the app types "s" with `mods: ["super"]`.
+    Text {
+        s: String,
+        #[serde(default)]
+        mods: Vec<String>,
+    },
     /// Reconfigure the stream live. Any subset may be sent; the host replies
     /// with the settings it actually applied (they are clamped).
     SetQuality {
@@ -96,6 +102,41 @@ mod tests {
                 assert!((dy + 3.0).abs() < f32::EPSILON);
             }
             other => panic!("expected MoveRel, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn text_carries_modifiers_and_stays_backwards_compatible() {
+        let msg: ClientMsg =
+            serde_json::from_str(r#"{"t":"text","s":"s","mods":["super"]}"#).expect("combo text");
+        match msg {
+            ClientMsg::Text { s, mods } => {
+                assert_eq!(s, "s");
+                assert_eq!(mods, vec!["super".to_string()]);
+            }
+            other => panic!("expected Text, got {other:?}"),
+        }
+
+        let msg: ClientMsg = serde_json::from_str(r#"{"t":"text","s":"hi"}"#).expect("plain text");
+        match msg {
+            ClientMsg::Text { s, mods } => {
+                assert_eq!(s, "hi");
+                assert!(mods.is_empty());
+            }
+            other => panic!("expected Text, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn single_character_key_names_parse() {
+        let msg: ClientMsg =
+            serde_json::from_str(r#"{"t":"key","name":"s","mods":["super"]}"#).expect("char key");
+        match msg {
+            ClientMsg::Key { name, mods, .. } => {
+                assert_eq!(name, "s");
+                assert_eq!(mods, vec!["super".to_string()]);
+            }
+            other => panic!("expected Key, got {other:?}"),
         }
     }
 

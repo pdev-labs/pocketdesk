@@ -143,6 +143,16 @@ The host creates one virtual device:
 
 Phone coordinates are **normalized inside the frame** (0..1), so the mapping is resolution-independent and survives `--scale`, DPI changes and window resizes.
 
+Keyboard input has two paths that share the same key table:
+
+* `{"t":"key","name":"esc","mods":["ctrl"]}` — a single named key (or any one
+  printable character, so `name:"c"` works) tapped while the modifiers are held.
+* `{"t":"text","s":"s","mods":["super"]}` — the soft keyboard's committed text.
+  Each character is tapped with the modifiers held down for the string, which is
+  what makes `Super+S` and `Ctrl+C` work from the on-screen keyboard. Uppercase
+  and shifted symbols add Shift per character unless Shift is already held, so
+  `?` with Super becomes `Super+Shift+/`.
+
 The frame covers one monitor; an absolute pointer addresses the whole desktop. The host therefore keeps two rectangles, discovered from `hyprctl -j monitors`:
 
 ```

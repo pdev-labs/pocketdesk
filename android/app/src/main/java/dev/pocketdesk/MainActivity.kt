@@ -197,7 +197,7 @@ class MainActivity : Activity(), SessionHub.Listener {
         screenView.onClick = { button, pad -> send(RemoteInput.click(button, pad)) }
         screenView.onScroll = { dy, dx, pad -> send(RemoteInput.scroll(dy, dx, pad)) }
 
-        keySink.onText = { text -> send(RemoteInput.text(text)) }
+        keySink.onText = { text -> send(RemoteInput.text(text, mods.toList())) }
         keySink.onKeyName = { name -> sendKey(name) }
 
         applyScreenMode()
