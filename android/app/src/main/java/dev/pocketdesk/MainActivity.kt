@@ -1165,14 +1165,22 @@ class MainActivity : Activity(), SessionHub.Listener {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun toggleKeyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        if (keySink.hasFocus()) {
+        // `isActive`, not `hasFocus`: after Back the sink can still hold focus
+        // while no keyboard is visible, and then the first tap did nothing.
+        if (keySink.hasFocus() && imm.isActive(keySink)) {
             imm.hideSoftInputFromWindow(keySink.windowToken, 0)
             keySink.clearFocus()
         } else {
             keySink.requestFocus()
-            keySink.post { imm.showSoftInput(keySink, InputMethodManager.SHOW_IMPLICIT) }
+            // Older IMEs ignore the request while the window is still settling.
+            keySink.postDelayed(
+                { imm.showSoftInput(keySink, InputMethodManager.SHOW_IMPLICIT) },
+                100,
+            )
+            keySink.postDelayed({ imm.showSoftInput(keySink, 0) }, 400)
         }
     }
 
