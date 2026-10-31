@@ -15,7 +15,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.TypedValue
-import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
@@ -34,6 +33,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
@@ -448,9 +448,12 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
 
         val label = prefs.name.ifBlank { prefs.host }
         val shownHost = prefs.wifiHost.ifBlank { prefs.host }
-        recentHost.text = "$label · $shownHost:${prefs.port}"
+        // A machine connected by address has no separate name; do not print it twice.
+        recentHost.text =
+            if (label == shownHost) "$label:${prefs.port}" else "$label · $shownHost:${prefs.port}"
         deviceName.text = label
-        deviceAddress.text = "$shownHost:${prefs.port}"
+        deviceAddress.text =
+            if (label == shownHost) "Port ${prefs.port}" else "$shownHost:${prefs.port}"
         deviceTransport.text = getString(
             if (prefs.usbCable) R.string.device_usb_mode else R.string.device_wifi_mode,
         )
@@ -843,6 +846,45 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         return String.format(Locale.US, "%.1f MB", mb)
     }
 
+    /**
+     * A modal sheet that opens fully expanded. In a landscape session the
+     * window is only ~390 dp tall, and a sheet left at its collapsed height
+     * would show a single clipped row.
+     */
+    private fun newSheet(layout: Int): Pair<BottomSheetDialog, View> {
+        val sheet = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(layout, null)
+        sheet.setContentView(content)
+        val inSession = remotePanel.visibility == View.VISIBLE
+        sheet.setOnShowListener {
+            sheet.behavior.skipCollapsed = true
+            sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+
+            if (inSession) {
+                // The sheet is its own window: without this the status bar
+                // comes back over the stream while it is open. The pill would
+                // also peek out on either side of the sheet.
+                ui.removeCallbacks(hideToolbarRunnable)
+                toolbar.visibility = View.GONE
+                toolbarHandle.visibility = View.GONE
+                sheet.window?.let { win ->
+                    WindowCompat.setDecorFitsSystemWindows(win, false)
+                    WindowInsetsControllerCompat(win, win.decorView).apply {
+                        systemBarsBehavior =
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        hide(WindowInsetsCompat.Type.systemBars())
+                    }
+                }
+            }
+        }
+        if (inSession) {
+            sheet.setOnDismissListener {
+                if (remotePanel.visibility == View.VISIBLE) applyToolbarVisibility()
+            }
+        }
+        return sheet to content
+    }
+
     // ── floating session pill ─────────────────────────────────────────
 
     private fun buildToolbar() {
@@ -993,8 +1035,7 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
 
     private fun showSessionMenu() {
         pokeToolbar()
-        val sheet = BottomSheetDialog(this)
-        val content = layoutInflater.inflate(R.layout.sheet_session, null)
+        val (sheet, content) = newSheet(R.layout.sheet_session)
 
         content.findViewById<TextView>(R.id.sessionTarget).text = SessionHub.target
         content.findViewById<TextView>(R.id.actionInputValue).text = getString(
@@ -1038,7 +1079,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         action(R.id.actionUpdates) { maybeCheckForUpdates(force = true) }
         action(R.id.actionDisconnect) { confirmStop() }
 
-        sheet.setContentView(content)
         sheet.show()
     }
 
@@ -1062,8 +1102,7 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
     }
 
     private fun pickQuality() {
-        val sheet = BottomSheetDialog(this)
-        val content = layoutInflater.inflate(R.layout.sheet_quality, null)
+        val (sheet, content) = newSheet(R.layout.sheet_quality)
         val group = content.findViewById<RadioGroup>(R.id.qualityGroup)
         val ids = intArrayOf(
             R.id.quality0,
@@ -1073,11 +1112,28 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             R.id.quality4,
         )
 
-        val current = captureState
-        val sent = PRESETS.indexOfFirst { it.fps == current?.fps && it.quality == current?.quality }
+        // Nothing saved means "whatever the host was started with"; a live
+        // session may instead match a preset we sent earlier.
         val saved = PRESETS.indexOfFirst { it.fps == prefs.fps && it.quality == prefs.quality }
-        group.check(ids[(if (sent >= 0) sent else saved).coerceAtLeast(0)])
+        val sent = PRESETS.indexOfFirst {
+            it.fps == captureState?.fps && it.quality == captureState?.quality
+        }
+        group.check(
+            when {
+                saved >= 0 -> ids[saved]
+                prefs.quality == 0 -> R.id.qualityHost
+                sent >= 0 -> ids[sent]
+                else -> R.id.qualityHost
+            },
+        )
         group.setOnCheckedChangeListener { _, checked ->
+            if (checked == R.id.qualityHost) {
+                prefs.saveStream(0, 0, 1.0)
+                refreshSettings()
+                if (SessionHub.isLive) toast(getString(R.string.quality_host_default_live))
+                sheet.dismiss()
+                return@setOnCheckedChangeListener
+            }
             val index = ids.indexOf(checked)
             if (index >= 0) {
                 applyPreset(PRESETS[index])
@@ -1085,13 +1141,11 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             }
         }
 
-        sheet.setContentView(content)
         sheet.show()
     }
 
     private fun pickInputMode() {
-        val sheet = BottomSheetDialog(this)
-        val content = layoutInflater.inflate(R.layout.sheet_input, null)
+        val (sheet, content) = newSheet(R.layout.sheet_input)
         val group = content.findViewById<RadioGroup>(R.id.inputGroup)
 
         group.check(
@@ -1119,9 +1173,15 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         }
 
         val speed = content.findViewById<Slider>(R.id.padSpeed)
+        val speedValue = content.findViewById<TextView>(R.id.padSpeedValue)
+        fun showSpeed(value: Float) {
+            speedValue.text = String.format(java.util.Locale.US, "%.1f×", value)
+        }
         val stops = listOf(1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f, 2.2f, 2.4f)
         speed.value = stops.minByOrNull { kotlin.math.abs(it - prefs.padSpeed) } ?: 1.6f
+        showSpeed(speed.value)
         speed.addOnChangeListener { _, value, fromUser ->
+            showSpeed(value)
             if (fromUser) {
                 prefs.padSpeed = value
                 applyInputMode()
@@ -1129,7 +1189,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         }
 
         content.findViewById<Button>(R.id.inputDone).setOnClickListener { sheet.dismiss() }
-        sheet.setContentView(content)
         sheet.show()
     }
 
@@ -1163,8 +1222,7 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
     }
 
     private fun pickAudio() {
-        val sheet = BottomSheetDialog(this)
-        val content = layoutInflater.inflate(R.layout.sheet_audio, null)
+        val (sheet, content) = newSheet(R.layout.sheet_audio)
         val group = content.findViewById<RadioGroup>(R.id.audioGroup)
         val machine = content.findViewById<com.google.android.material.radiobutton.MaterialRadioButton>(
             R.id.audioMachine,
@@ -1196,13 +1254,11 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             sheet.dismiss()
         }
 
-        sheet.setContentView(content)
         sheet.show()
     }
 
     private fun pickKeys() {
-        val sheet = BottomSheetDialog(this)
-        val content = layoutInflater.inflate(R.layout.sheet_keys, null)
+        val (sheet, content) = newSheet(R.layout.sheet_keys)
         val group = content.findViewById<ChipGroup>(R.id.keysGroup)
         val selected = prefs.keyList.ifEmpty { DEFAULT_KEYS }.toMutableSet()
 
@@ -1233,7 +1289,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             sheet.dismiss()
         }
 
-        sheet.setContentView(content)
         sheet.show()
     }
 
@@ -1308,8 +1363,7 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
     }
 
     private fun pickScreenMode() {
-        val sheet = BottomSheetDialog(this)
-        val content = layoutInflater.inflate(R.layout.sheet_screen, null)
+        val (sheet, content) = newSheet(R.layout.sheet_screen)
         val group = content.findViewById<RadioGroup>(R.id.screenGroup)
         val ids = intArrayOf(R.id.screenFit, R.id.screenFill, R.id.screenStretch)
         val values = arrayOf("fit", "fill", "stretch")
@@ -1331,7 +1385,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             }
         }
 
-        sheet.setContentView(content)
         sheet.show()
     }
 

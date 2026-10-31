@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.camera.core.CameraSelector
@@ -16,6 +17,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -54,6 +57,20 @@ class ScanActivity : ComponentActivity() {
 
         previewView = findViewById(R.id.preview)
         findViewById<TextView>(R.id.cancelButton).setOnClickListener { finish() }
+
+        // The camera is full-bleed; only the text and the card dodge the bars.
+        val title = findViewById<View>(R.id.scanTitle)
+        val card = findViewById<View>(R.id.scanCard)
+        val baseTop = title.paddingTop
+        val baseBottom = (card.layoutParams as android.widget.FrameLayout.LayoutParams).bottomMargin
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.scanRoot)) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            title.setPadding(title.paddingLeft, baseTop + bars.top, title.paddingRight, title.paddingBottom)
+            (card.layoutParams as android.widget.FrameLayout.LayoutParams).bottomMargin =
+                baseBottom + bars.bottom
+            card.requestLayout()
+            insets
+        }
 
         scanner = BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()

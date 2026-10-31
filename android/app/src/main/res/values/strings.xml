@@ -136,9 +136,9 @@
     <string name="section_manual">Connect manually</string>
     <string name="manual_hint">The host prints this code the first time you run it.</string>
     <string name="discover_refresh">Refresh</string>
-    <string name="field_host">HOST OR IP</string>
-    <string name="field_port">PORT</string>
-    <string name="field_code">PAIRING CODE</string>
+    <string name="field_host">Host or IP</string>
+    <string name="field_port">Port</string>
+    <string name="field_code">Pairing code</string>
     <string name="connect_action">Connect</string>
 
     <string name="devices_title">Devices</string>
@@ -170,6 +170,8 @@
     <string name="settings_source">Release notes</string>
 
     <string name="quality_host_default">Host default</string>
+    <string name="quality_host_default_hint">Host default (whatever the host was started with)</string>
+    <string name="quality_host_default_live">Host defaults apply the next time you connect.</string>
     <string name="keys_count">%1$d keys</string>
     <string name="screen_fit_short">Fit</string>
     <string name="screen_fill_short">Fill</string>
