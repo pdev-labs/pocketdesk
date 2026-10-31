@@ -18,7 +18,7 @@ PocketDesk is deliberately small: one Rust daemon on the computer, one Kotlin ap
 * **Capture thread** — a dedicated OS thread runs the blocking capture backend in a loop. It sleeps when nobody is subscribed (`broadcast::Receiver` count is zero), so an idle host costs nothing.
 * **Broadcast channel** — capacity 2, `Arc<Frame>`. Slow clients are dropped rather than queued; a phone that cannot keep up sees fewer frames, never a growing delay.
 * **Session task per client** — axum/WebSocket. It forwards frames, parses input messages, and sends a stats line every 5 seconds.
-* **Input injector** — one `uinput` device for the whole process, guarded by a mutex whose critical section contains only `write(2)` calls (no `await`).
+* **Input injector** — one `uinput` device for the whole process, guarded by a mutex whose critical section contains only `write(2)` calls (no `await`). On Windows the same interface is backed by `SendInput`; the protocol and the phone do not change.
 
 Everything is `tokio`, except the capture and ffmpeg-reader threads, which are blocking by nature.
 
@@ -174,6 +174,14 @@ abs_x = (captured.x + nx·captured.w − layout.x) / layout.w · 32767
 The layout is re-read every 20 seconds, so hot-plugging a display or rotating the tablet does not desync the pointer.
 
 **Why uinput and not XTest/X11 automation:** uinput is below the display server, so the same code drives Wayland and X11, and the compositor treats events as first-class input (focus, hotkeys, drag-and-drop). It needs the udev rule in `scripts/setup-linux-input.sh`; without it the host degrades to view-only instead of failing.
+
+**Windows** uses `SendInput` with the same normalized coordinates. `gdigrab` captures the
+whole virtual desktop, so the captured rectangle already equals the layout and the
+pointer can cross monitors; absolute moves use `MOUSEEVENTF_VIRTUALDESK`. Keyboard
+events are mapped from the Linux key table to virtual keys, and typed text goes
+through `KEYEVENTF_UNICODE`, which keeps non-Latin input and keyboard layouts
+correct. UIPI still applies: a window owned by an elevated process only receives
+input when PocketDesk is elevated too.
 
 ## Audio
 
