@@ -859,18 +859,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             sheet.behavior.skipCollapsed = true
             sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
 
-            // A landscape session has ~390 dp of height: leave a strip of the
-            // stream visible instead of letting the sheet fill the screen.
-            if (inSession &&
-                resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            ) {
-                // Size the content, not the sheet frame: the behavior anchors
-                // the sheet to the bottom from its measured content height.
-                val height = (resources.displayMetrics.heightPixels * 0.9).toInt()
-                content.layoutParams = content.layoutParams.apply { this.height = height }
-                content.requestLayout()
-            }
-
             if (inSession) {
                 // The sheet is its own window: without this the status bar
                 // comes back over the stream while it is open. The pill would
@@ -1184,9 +1172,15 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         }
 
         val speed = content.findViewById<Slider>(R.id.padSpeed)
+        val speedValue = content.findViewById<TextView>(R.id.padSpeedValue)
+        fun showSpeed(value: Float) {
+            speedValue.text = String.format(java.util.Locale.US, "%.1f×", value)
+        }
         val stops = listOf(1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f, 2.2f, 2.4f)
         speed.value = stops.minByOrNull { kotlin.math.abs(it - prefs.padSpeed) } ?: 1.6f
+        showSpeed(speed.value)
         speed.addOnChangeListener { _, value, fromUser ->
+            showSpeed(value)
             if (fromUser) {
                 prefs.padSpeed = value
                 applyInputMode()
