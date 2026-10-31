@@ -510,17 +510,27 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
     }
 
     /**
-     * Wide windows get a centred column: the tab content already has a 20 dp
-     * margin, so add the rest here. Applied on rotation too — the activity
-     * handles config changes itself, so resource qualifiers would not be
-     * re-resolved.
+     * Wide windows get a ~640 dp content column. Measured from the view itself
+     * after layout: this activity handles orientation changes, so the resource
+     * configuration is not re-resolved and a `values-land` dimension would stay
+     * applied after rotating back.
      */
     private fun applyContentGutter() {
         if (!::homeTab.isInitialized) return
-        val extra = if (resources.configuration.screenWidthDp >= 600) dp(100) else 0
-        homeTab.setPadding(extra, 0, extra, 0)
-        devicesTab.setPadding(extra, 0, extra, 0)
-        settingsTab.setPadding(extra, 0, extra, 0)
+        homeTab.post { updateGutter() }
+    }
+
+    private fun updateGutter() {
+        val width = homeTab.width
+        if (width <= 0) return
+        val density = resources.displayMetrics.density
+        val extraDp = (width / density - 640f) / 2f
+        val extra = if (extraDp > 0f) (extraDp * density).toInt() else 0
+        for (tab in arrayOf(homeTab, devicesTab, settingsTab)) {
+            if (tab.paddingLeft != extra || tab.paddingRight != extra) {
+                tab.setPadding(extra, 0, extra, 0)
+            }
+        }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
