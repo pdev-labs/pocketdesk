@@ -251,9 +251,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         settingsVersion = findViewById(R.id.settingsVersion)
 
         val root = findViewById<View>(R.id.root)
-        // Re-run after every layout pass; the guard inside makes it a no-op
-        // unless the window width (or orientation) actually changed.
-        root.viewTreeObserver.addOnGlobalLayoutListener { applyContentGutter() }
         val shell = connectPanel
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -285,7 +282,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             showTab(item.itemId)
             true
         }
-        applyContentGutter()
         showTab(R.id.nav_home)
 
         scanButton.setOnClickListener { scan() }
@@ -510,27 +506,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         }
         syncingUsb = false
         deviceUsbHint.visibility = if (prefs.usbCable) View.VISIBLE else View.GONE
-    }
-
-    /**
-     * Wide windows get a ~640 dp content column. Measured from the laid-out
-     * view rather than the resource configuration: this activity handles
-     * orientation changes itself, so `values-land` would stay applied after
-     * rotating back. Called from a global layout listener because the width is
-     * only final after a layout pass.
-     */
-    private fun applyContentGutter() {
-        if (!::homeTab.isInitialized) return
-        val width = homeTab.width
-        if (width <= 0) return
-        val density = resources.displayMetrics.density
-        val extraDp = (width / density - 640f) / 2f
-        val extra = if (extraDp > 0f) (extraDp * density).toInt() else 0
-        for (tab in arrayOf(homeTab, devicesTab, settingsTab)) {
-            if (tab.paddingLeft != extra || tab.paddingRight != extra) {
-                tab.setPadding(extra, 0, extra, 0)
-            }
-        }
     }
 
     private fun showTab(itemId: Int) {
