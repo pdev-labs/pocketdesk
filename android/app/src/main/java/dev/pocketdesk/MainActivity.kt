@@ -251,6 +251,9 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         settingsVersion = findViewById(R.id.settingsVersion)
 
         val root = findViewById<View>(R.id.root)
+        // Re-run after every layout pass; the guard inside makes it a no-op
+        // unless the window width (or orientation) actually changed.
+        root.viewTreeObserver.addOnGlobalLayoutListener { applyContentGutter() }
         val shell = connectPanel
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -510,17 +513,14 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
     }
 
     /**
-     * Wide windows get a ~640 dp content column. Measured from the view itself
-     * after layout: this activity handles orientation changes, so the resource
-     * configuration is not re-resolved and a `values-land` dimension would stay
-     * applied after rotating back.
+     * Wide windows get a ~640 dp content column. Measured from the laid-out
+     * view rather than the resource configuration: this activity handles
+     * orientation changes itself, so `values-land` would stay applied after
+     * rotating back. Called from a global layout listener because the width is
+     * only final after a layout pass.
      */
     private fun applyContentGutter() {
         if (!::homeTab.isInitialized) return
-        homeTab.post { updateGutter() }
-    }
-
-    private fun updateGutter() {
         val width = homeTab.width
         if (width <= 0) return
         val density = resources.displayMetrics.density
@@ -531,11 +531,6 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
                 tab.setPadding(extra, 0, extra, 0)
             }
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        applyContentGutter()
     }
 
     private fun showTab(itemId: Int) {
