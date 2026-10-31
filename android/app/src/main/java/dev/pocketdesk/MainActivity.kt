@@ -452,7 +452,8 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         recentHost.text =
             if (label == shownHost) "$label:${prefs.port}" else "$label · $shownHost:${prefs.port}"
         deviceName.text = label
-        deviceAddress.text = "$shownHost:${prefs.port}"
+        deviceAddress.text =
+            if (label == shownHost) "Port ${prefs.port}" else "$shownHost:${prefs.port}"
         deviceTransport.text = getString(
             if (prefs.usbCable) R.string.device_usb_mode else R.string.device_wifi_mode,
         )

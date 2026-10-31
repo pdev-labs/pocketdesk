@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Side margin of a tab's content column. Wide (landscape) windows get a
+         centred column instead of text stretched edge to edge. -->
+    <dimen name="content_gutter">20dp</dimen>
+</resources>
