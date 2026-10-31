@@ -864,12 +864,11 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             if (inSession &&
                 resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             ) {
+                // Size the content, not the sheet frame: the behavior anchors
+                // the sheet to the bottom from its measured content height.
                 val height = (resources.displayMetrics.heightPixels * 0.9).toInt()
-                sheet.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-                    ?.let { root ->
-                        root.layoutParams = root.layoutParams.apply { this.height = height }
-                        root.requestLayout()
-                    }
+                content.layoutParams = content.layoutParams.apply { this.height = height }
+                content.requestLayout()
             }
 
             if (inSession) {
