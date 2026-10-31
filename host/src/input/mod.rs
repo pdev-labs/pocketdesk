@@ -14,10 +14,16 @@ mod uinput;
 #[cfg(target_os = "linux")]
 use uinput::Device;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+mod windows;
+
+#[cfg(windows)]
+use windows::Device;
+
+#[cfg(not(any(target_os = "linux", windows)))]
 mod stub;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", windows)))]
 use stub::Device;
 
 pub struct Input {

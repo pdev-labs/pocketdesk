@@ -52,7 +52,8 @@
 
 ## v0.5 — every desktop
 
-* **Windows input** — `SendInput` for pointer and keyboard (capture already works via `gdigrab`).
+* **Windows input** — shipped in 0.8.0: `SendInput` for pointer, wheel and keyboard
+  (capture already worked via `gdigrab`).
 * **macOS input** — `CGEvent` plus the Accessibility permission prompt (capture already works via `avfoundation`).
 * **Native Wayland capture** — a `wlr-screencopy` client in-process instead of `grim` per frame; roughly doubles the frame ceiling.
 * **XDG portal capture** — GNOME and KDE on Wayland, using the PipeWire ScreenCast portal with a one-time picker dialog.

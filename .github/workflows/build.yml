@@ -181,6 +181,14 @@ jobs:
           body: |
             PocketDesk ${{ github.ref_name }}
 
+            **New interface** — Material You, rebuilt from the connect screen to the session
+            controls: **Home / Devices / Settings** tabs, a discovery-first Home with found
+            computers as cards, bottom sheets for quality, input, audio, keys and screen size,
+            and a floating session pill that fades away and comes back with a tap. Colours
+            follow the wallpaper on Android 12+ and use the built-in dark palette below that.
+
+            **Windows host** — see below: remote input now works on Windows.
+
             **USB or Wi-Fi** — tick "USB cable (fast)" on the connect screen. The host
             sets up `adb reverse`, so the app talks to the host over USB at 30 fps/q90,
             with a 2400 px second screen. Wi-Fi stays one tap away and keeps its own
@@ -244,7 +252,11 @@ jobs:
             First run prints a pairing code and QR; `sudo ./setup-linux-input.sh` enables remote mouse/keyboard.
             `./pocketdesk --extend 1600x900` starts in second-screen mode.
 
-            **Windows / macOS** — binaries are built and stream screens through ffmpeg, but remote input is
-            not implemented yet. Treat them as previews (see the roadmap).
+            **Windows** — `pocketdesk-windows-x86_64.exe` drives the desktop too: pointer, clicks,
+            wheel and keyboard go through `SendInput`, with the same direct-touch and touchpad
+            modes. Install ffmpeg (`winget install ffmpeg`), run it, and allow the firewall
+            prompt. Second screen and phone audio are Linux-only and stay that way for now.
+
+            **macOS** — screen capture through `avfoundation`; input is still to come.
 
             Verify downloads with `SHA256SUMS.txt`.

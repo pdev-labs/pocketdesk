@@ -1208,7 +1208,7 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         if (info != null && !info.audio) {
             if (!audioUnavailableShown) {
                 audioUnavailableShown = true
-                toast(getString(R.string.audio_failed, "the host has no parec/pulseaudio-utils"))
+                toast(getString(R.string.audio_failed, getString(R.string.audio_no_host_capture)))
             }
             return
         }

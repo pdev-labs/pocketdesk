@@ -218,6 +218,7 @@ pub fn for_char(c: char) -> Option<(u16, bool)> {
 }
 
 /// Every key code the host may ever press, so uinput can advertise them.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn all_codes() -> Vec<u16> {
     let mut codes: Vec<u16> = (b'a'..=b'z').map(|c| letter(c as char).unwrap()).collect();
     codes.extend((b'0'..=b'9').map(|c| digit(c as char).unwrap()));
