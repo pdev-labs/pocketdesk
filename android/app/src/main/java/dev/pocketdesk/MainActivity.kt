@@ -448,7 +448,9 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
 
         val label = prefs.name.ifBlank { prefs.host }
         val shownHost = prefs.wifiHost.ifBlank { prefs.host }
-        recentHost.text = "$label · $shownHost:${prefs.port}"
+        // A machine connected by address has no separate name; do not print it twice.
+        recentHost.text =
+            if (label == shownHost) "$label:${prefs.port}" else "$label · $shownHost:${prefs.port}"
         deviceName.text = label
         deviceAddress.text = "$shownHost:${prefs.port}"
         deviceTransport.text = getString(
@@ -852,12 +854,31 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         val sheet = BottomSheetDialog(this)
         val content = layoutInflater.inflate(layout, null)
         sheet.setContentView(content)
+        val inSession = remotePanel.visibility == View.VISIBLE
         sheet.setOnShowListener {
             sheet.behavior.skipCollapsed = true
             sheet.behavior.state = BottomSheetBehavior.STATE_EXPANDED
-            if (remotePanel.visibility == View.VISIBLE) {
+
+            // A landscape session has ~390 dp of height: leave a strip of the
+            // stream visible instead of letting the sheet fill the screen.
+            if (inSession &&
+                resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            ) {
+                val height = (resources.displayMetrics.heightPixels * 0.9).toInt()
+                sheet.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                    ?.let { root ->
+                        root.layoutParams = root.layoutParams.apply { this.height = height }
+                        root.requestLayout()
+                    }
+            }
+
+            if (inSession) {
                 // The sheet is its own window: without this the status bar
-                // comes back over the stream while it is open.
+                // comes back over the stream while it is open. The pill would
+                // also peek out on either side of the sheet.
+                ui.removeCallbacks(hideToolbarRunnable)
+                toolbar.visibility = View.GONE
+                toolbarHandle.visibility = View.GONE
                 sheet.window?.let { win ->
                     WindowCompat.setDecorFitsSystemWindows(win, false)
                     WindowInsetsControllerCompat(win, win.decorView).apply {
@@ -866,6 +887,11 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
                         hide(WindowInsetsCompat.Type.systemBars())
                     }
                 }
+            }
+        }
+        if (inSession) {
+            sheet.setOnDismissListener {
+                if (remotePanel.visibility == View.VISIBLE) applyToolbarVisibility()
             }
         }
         return sheet to content

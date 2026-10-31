@@ -116,7 +116,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="26dp"
             android:visibility="gone"
-            app:cardBackgroundColor="?attr/colorSurfaceVariant"
+            app:cardBackgroundColor="?attr/colorSurface"
             app:cardCornerRadius="24dp"
             app:cardElevation="0dp"
             app:strokeColor="?attr/colorOutline"
