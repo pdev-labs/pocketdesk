@@ -18,7 +18,7 @@
 | --- | --- |
 | Linux host (Hyprland/Sway/grim, X11/ffmpeg) | **Working** — screen, pointer, keyboard |
 | Android client | **Working** — stream over Wi-Fi or USB cable, direct touch or touchpad gestures, keyboard, QR pairing, background session, quality presets, second screen, phone audio, in-app updates |
-| Windows host | Preview — screen via `gdigrab`, input not implemented yet |
+| Windows host | **Working** — screen via `gdigrab`, pointer + keyboard through `SendInput` (second screen and audio are Linux-only) |
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
 | Clipboard, file transfer | Roadmap |
 
@@ -59,7 +59,26 @@ No 64-character tokens, no typing IP addresses twice.
 Grab the files from [Releases](https://github.com/pdev-labs/pocketdesk/releases):
 
 * **Phone:** `pocketdesk.apk` (Android 8+). Sideload it; there is no Play Store listing.
-* **Computer:** `pocketdesk-linux-x86_64.tar.gz`, unpack it anywhere.
+* **Linux:** `pocketdesk-linux-x86_64.tar.gz`, unpack it anywhere.
+* **Windows 10/11 (64-bit):** `pocketdesk-windows-x86_64.exe`. Install
+  [ffmpeg](https://ffmpeg.org/download.html) first (`winget install ffmpeg`), put
+  `pocketdesk.exe` somewhere permanent, and allow it through the firewall when
+  Windows asks — the phone connects to it on the LAN.
+
+### Windows in two minutes
+
+```powershell
+winget install ffmpeg
+# open a new terminal so PATH picks ffmpeg up
+.\pocketdesk-windows-x86_64.exe
+```
+
+The host prints a QR code and an eight-character code; scan or type it in the
+app. Pointer and keyboard work through `SendInput` (no driver, no elevation for
+normal windows — a window owned by an administrator needs PocketDesk started as
+administrator too). Copying, full-screen and multi-monitor desktops map as you
+would expect; **second screen** and **audio to the phone** are Linux-only for
+now, and the phone says so if you pick them.
 
 ```bash
 tar xzf pocketdesk-linux-x86_64.tar.gz
@@ -375,7 +394,7 @@ cd android && gradle assembleDebug    # JDK 17 + Android SDK 35, Gradle 8.9+
 ```
 host/              Rust daemon: capture, WebSocket server, input injection, pairing QR
   src/capture/     grim (Wayland), ffmpeg (X11/Win/macOS), test pattern
-  src/input/       uinput virtual pointer + keyboard (Linux), stubs elsewhere
+  src/input/       uinput virtual pointer + keyboard (Linux), SendInput (Windows), stubs elsewhere
   src/pairing.rs   short code/QR payload and terminal renderer
   src/second_screen.rs  Hyprland headless monitor for second-screen mode
 android/           Kotlin app: session hub + foreground service, CameraX/ML Kit scanner
@@ -390,7 +409,7 @@ docs/              architecture, wire protocol, Linux setup, security, roadmap
 
 ## Roadmap
 
-H.264 via MediaCodec for ~4× less bandwidth, TLS with certificate pinning, clipboard sync, native input on Windows and macOS, multi-monitor switching, and second-screen support beyond Hyprland. See [docs/roadmap.md](docs/roadmap.md).
+H.264 via MediaCodec for ~4× less bandwidth, TLS with certificate pinning, clipboard sync, native input on macOS, multi-monitor switching, and second-screen support beyond Hyprland. See [docs/roadmap.md](docs/roadmap.md).
 
 ## License
 

@@ -26,14 +26,7 @@ pub const CHANNELS: u16 = 2;
 const FRAME_BYTES: usize = (RATE as usize / 50) * CHANNELS as usize * 2;
 
 pub fn available() -> bool {
-    which("parec").is_some()
-}
-
-fn which(bin: &str) -> Option<std::path::PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join(bin))
-        .find(|candidate| candidate.is_file())
+    crate::usb::which("parec").is_some()
 }
 
 pub async fn handle(mut socket: WebSocket, state: Arc<AppState>, mute_host: bool) {

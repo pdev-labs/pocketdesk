@@ -73,6 +73,7 @@
     <string name="option_mute_host">Mute this machine while the phone plays audio</string>
     <string name="audio_hint">Audio is playing on the phone.</string>
     <string name="audio_failed">Audio unavailable: %1$s</string>
+    <string name="audio_no_host_capture">this computer cannot share its audio</string>
 
     <string name="pick_keys">Toolbar keys</string>
     <string name="done">Done</string>

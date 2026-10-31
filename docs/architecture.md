@@ -252,4 +252,4 @@ MainActivity ──attach/detach──► SessionHub (singleton) ◄──listen
 
 ## What is intentionally missing
 
-Clipboard, file transfer, multi-monitor switching, TLS, Windows/macOS input. All are additive; none require changing the frame or input model.
+Clipboard, file transfer, multi-monitor switching, TLS, macOS input. All are additive; none require changing the frame or input model.

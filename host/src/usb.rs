@@ -11,12 +11,23 @@
 use std::{process::{Command, Stdio}, time::Duration};
 
 pub fn adb_available() -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
+    which("adb").is_some()
+}
+
+/// Look a program up on `PATH`, trying the Windows `.exe` suffix too.
+pub fn which(bin: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    let names = if cfg!(windows) {
+        [format!("{bin}.exe"), bin.to_string()]
+    } else {
+        [bin.to_string(), format!("{bin}.exe")]
     };
-    std::env::split_paths(&path)
-        .map(|dir| dir.join("adb"))
-        .any(|candidate| candidate.is_file())
+    std::env::split_paths(&path).find_map(|dir| {
+        names
+            .iter()
+            .map(|name| dir.join(name))
+            .find(|candidate| candidate.is_file())
+    })
 }
 
 fn devices() -> Vec<String> {

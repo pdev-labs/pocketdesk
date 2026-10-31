@@ -37,6 +37,22 @@ impl VirtualDisplay {
         Self::create_named(OUTPUT_NAME, requested_w, requested_h, on_demand)
     }
 
+    /// Hyprland is the only compositor with a headless-output command we can
+    /// drive; elsewhere the phone mirrors instead.
+    fn ensure_supported() -> Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            Ok(())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            anyhow::bail!(
+                "the second screen needs a Hyprland host (Linux); \
+                 this build can mirror the desktop but not extend it"
+            )
+        }
+    }
+
     /// Create (or resize) a headless output and wait until the compositor
     /// reports it at the requested size.
     ///
@@ -48,6 +64,7 @@ impl VirtualDisplay {
         requested_h: u32,
         on_demand: bool,
     ) -> Result<Self> {
+        Self::ensure_supported()?;
         let width = even(requested_w.clamp(480, 3840));
         let height = even(requested_h.clamp(320, 2160));
 
