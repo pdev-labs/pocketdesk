@@ -282,6 +282,7 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             showTab(item.itemId)
             true
         }
+        applyContentGutter()
         showTab(R.id.nav_home)
 
         scanButton.setOnClickListener { scan() }
@@ -506,6 +507,25 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
         }
         syncingUsb = false
         deviceUsbHint.visibility = if (prefs.usbCable) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Wide windows get a centred column: the tab content already has a 20 dp
+     * margin, so add the rest here. Applied on rotation too — the activity
+     * handles config changes itself, so resource qualifiers would not be
+     * re-resolved.
+     */
+    private fun applyContentGutter() {
+        if (!::homeTab.isInitialized) return
+        val extra = if (resources.configuration.screenWidthDp >= 600) dp(100) else 0
+        homeTab.setPadding(extra, 0, extra, 0)
+        devicesTab.setPadding(extra, 0, extra, 0)
+        settingsTab.setPadding(extra, 0, extra, 0)
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyContentGutter()
     }
 
     private fun showTab(itemId: Int) {
