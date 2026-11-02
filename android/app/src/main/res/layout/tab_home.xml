@@ -262,7 +262,7 @@
                         android:layout_height="wrap_content"
                         android:hint="K7M4-QX2B"
                         android:importantForAutofill="no"
-                        android:inputType="textVisiblePassword|textNoSuggestions|textCapCharacters"
+                        android:inputType="textCapCharacters|textNoSuggestions"
                         android:maxLength="128"
                         android:maxLines="1" />
                 </com.google.android.material.textfield.TextInputLayout>

@@ -256,7 +256,12 @@ class MainActivity : AppCompatActivity(), SessionHub.Listener {
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-            shell.setPadding(0, bars.top, 0, maxOf(bars.bottom, ime.bottom))
+            val typing = insets.isVisible(WindowInsetsCompat.Type.ime())
+            shell.setPadding(0, bars.top, 0, if (typing) ime.bottom else bars.bottom)
+            // Above the keyboard the tabs would be a 250 px strip and the nav
+            // would float in the middle of the screen. Let the form have the
+            // whole window instead; the nav comes back when the keyboard goes.
+            bottomNav.visibility = if (typing) View.GONE else View.VISIBLE
             (toolbar.layoutParams as? FrameLayout.LayoutParams)?.topMargin = cutout.top + dp(10)
             (toolbarHandle.layoutParams as? FrameLayout.LayoutParams)?.topMargin =
                 cutout.top + dp(10)

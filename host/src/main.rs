@@ -102,6 +102,11 @@ async fn main() -> Result<()> {
     let fps_x10 = Arc::new(AtomicU32::new(cfg.fps.clamp(1, 60) * 10));
     let (frames, _) = tokio::sync::broadcast::channel(2);
 
+    if cfg.selftest_input {
+        selftest_input()?;
+        return Ok(());
+    }
+
     let settings = Arc::new(RwLock::new(capture::CaptureSettings::from_config(&cfg)));
     let plan = capture::CapturePlan {
         backend: capture::resolve(cfg.capture),
@@ -276,6 +281,44 @@ pub fn refresh_geometry(state: &AppState) {
         }
         Err(err) => tracing::debug!("monitor layout unavailable: {err:#}"),
     }
+}
+
+/// Exercise the platform input backend end to end: normalized absolute move,
+/// relative move, wheel, a key tap with a modifier, and typed text.
+fn selftest_input() -> Result<()> {
+    use protocol::{ClientMsg, KeyAction};
+
+    let mut input = input::Input::new()?;
+    let geom = layout::Geometry::fallback(1920.0, 1080.0);
+
+    input.apply(&ClientMsg::Move { x: 0.5, y: 0.5 }, &geom)?;
+    input.apply(&ClientMsg::MoveRel { dx: 2.0, dy: 2.0 }, &geom)?;
+    input.apply(
+        &ClientMsg::Scroll {
+            dx: 0.0,
+            dy: 1.0,
+            pad: false,
+        },
+        &geom,
+    )?;
+    input.apply(
+        &ClientMsg::Key {
+            name: "shift".to_string(),
+            mods: Vec::new(),
+            action: Some(KeyAction::Tap),
+        },
+        &geom,
+    )?;
+    input.apply(
+        &ClientMsg::Text {
+            s: "pocketdesk".to_string(),
+            mods: Vec::new(),
+        },
+        &geom,
+    )?;
+
+    println!("input self-test: the OS accepted pointer, wheel and keyboard events");
+    Ok(())
 }
 
 fn banner(cfg: &Config, state: &AppState, token: &str, usb_ready: usize) {

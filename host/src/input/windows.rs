@@ -325,3 +325,34 @@ impl Device {
         result.and(released)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::vk;
+    use crate::keys;
+
+    #[test]
+    fn letters_and_digits_map_to_their_virtual_keys() {
+        assert_eq!(vk(16), Some(0x51)); // q -> VK_Q
+        assert_eq!(vk(30), Some(0x41)); // a -> VK_A
+        assert_eq!(vk(44), Some(0x5A)); // z -> VK_Z
+        assert_eq!(vk(2), Some(0x31)); // 1
+        assert_eq!(vk(11), Some(0x30)); // 0
+    }
+
+    #[test]
+    fn named_keys_map_to_virtual_keys() {
+        assert_eq!(vk(keys::KEY_ENTER), Some(0x0D));
+        assert_eq!(vk(keys::KEY_ESC), Some(0x1B));
+        assert_eq!(vk(keys::KEY_LEFTCTRL), Some(0x11));
+        assert_eq!(vk(keys::KEY_RIGHTALT), Some(0x12));
+        assert_eq!(vk(keys::KEY_LEFTMETA), Some(0x5B));
+        assert_eq!(vk(keys::KEY_F12), Some(0x7B));
+        assert_eq!(vk(keys::KEY_PAGEUP), Some(0x21));
+    }
+
+    #[test]
+    fn unmapped_codes_are_rejected() {
+        assert_eq!(vk(120), None); // KEY_KPENTER has no entry yet
+    }
+}

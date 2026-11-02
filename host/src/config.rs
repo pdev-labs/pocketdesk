@@ -88,6 +88,12 @@ pub struct Config {
     #[arg(long)]
     pub no_usb: bool,
 
+    /// Inject a few harmless pointer, wheel and keyboard events, then exit.
+    /// Used by CI to prove the platform input backend reaches the OS; not
+    /// meant to be run on a desktop you are using.
+    #[arg(long, hide = true)]
+    pub selftest_input: bool,
+
     /// Show verbose logs.
     #[arg(long)]
     pub verbose: bool,
