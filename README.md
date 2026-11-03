@@ -302,6 +302,10 @@ keys: tap **Super** (or Ctrl/Alt/Shift) so it lights up, then type `s` on the
 Google keyboard and the host receives `Super+S`. Shift works the same way, and
 the chips stay latched until you tap them again, so Shift can cover a whole word.
 
+<p align="center">
+  <img src="docs/images/sheet-quality.png" width="260" alt="Quality and frame rate bottom sheet">
+</p>
+
 ## Use the phone as a second screen
 
 Mirroring copies the laptop panel. *Second screen* instead asks the host for a
