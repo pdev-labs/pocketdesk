@@ -22,6 +22,22 @@
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
 | Clipboard, file transfer | Roadmap |
 
+## Preview
+
+<p align="center">
+  <img src="docs/images/home.png" width="220" alt="Home: computers found on the network and one remembered connection">
+  <img src="docs/images/devices.png" width="220" alt="Devices: the saved computer, USB mode and pairing">
+  <img src="docs/images/settings.png" width="220" alt="Settings: quality, screen size, input, audio and second screen">
+</p>
+
+<p align="center"><em>Home, Devices and Settings. Material You, so the palette follows the wallpaper.</em></p>
+
+<p align="center">
+  <img src="docs/images/session.jpg" width="900" alt="A live session: the desktop fills the phone, with the floating toolbar handle in the corner">
+</p>
+
+<p align="center"><em>A live session. The desktop gets the whole screen; the floating controls fade away until you tap the handle.</em></p>
+
 Screens stream as JPEG at a paced 15 fps by default. On this project's test machine (1366×768, Hyprland, `grim`) that is ~20 fps at ~2 MB/s over Wi-Fi, with end-to-end latency around 100 ms. On a slow link, pick a lower preset in the app — the host reconfigures without restarting.
 
 ## Pair once, then it is one tap
