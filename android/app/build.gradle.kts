@@ -12,11 +12,52 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.pocketdesk"
-        minSdk = 26
         targetSdk = 35
-        versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 16
-        versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.8.1"
+    }
+
+    // One source tree, two channels. `modern` is the normal app; `legacy` is
+    // the Android 5.0–7.1 build (API 21) with its own package and update
+    // manifest, so both can be installed side by side.
+    flavorDimensions += "channel"
+
+    productFlavors {
+        create("modern") {
+            dimension = "channel"
+            applicationId = "dev.pocketdesk"
+            minSdk = 26
+            versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 16
+            versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "0.8.1"
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST",
+                "\"https://github.com/pdev-labs/pocketdesk/releases/latest/download/latest.json\"",
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_PAGE",
+                "\"https://github.com/pdev-labs/pocketdesk/releases/latest\"",
+            )
+        }
+
+        create("legacy") {
+            dimension = "channel"
+            applicationId = "dev.pocketdesk.legacy"
+            minSdk = 21
+            versionCode = (project.findProperty("pocketdeskVersionCode") as String?)?.toInt() ?: 1
+            versionName = (project.findProperty("pocketdeskVersionName") as String?) ?: "legacy-dev"
+            // The legacy channel publishes to a fixed prerelease tag, never to
+            // `latest`, so a legacy build cannot shadow the normal update.
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST",
+                "\"https://github.com/pdev-labs/pocketdesk/releases/download/legacy-latest/latest-legacy.json\"",
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_PAGE",
+                "\"https://github.com/pdev-labs/pocketdesk/releases/tag/legacy-latest\"",
+            )
+        }
     }
 
     if (!ciKeystore.isNullOrBlank()) {

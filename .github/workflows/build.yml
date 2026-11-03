@@ -59,7 +59,7 @@ jobs:
         run: |
           version_name="${GITHUB_REF_NAME#v}"
           if [ "${GITHUB_REF_TYPE}" != "tag" ]; then version_name="dev-${GITHUB_RUN_NUMBER}"; fi
-          gradle --no-daemon assembleDebug assembleRelease \
+          gradle --no-daemon assembleModernDebug assembleModernRelease \
             -PpocketdeskVersionName="${version_name}" \
             -PpocketdeskVersionCode="${GITHUB_RUN_NUMBER}"
 
@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | tee certs.txt
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/modern/release/app-modern-release.apk | tee certs.txt
           if ! grep -q "CN=PocketDesk" certs.txt; then
             echo "::error::Release APK is not signed with the PocketDesk update key."
             exit 1
@@ -80,8 +80,8 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/debug/app-debug.apk out/pocketdesk-debug.apk
-          cp android/app/build/outputs/apk/release/app-release.apk out/pocketdesk.apk
+          cp android/app/build/outputs/apk/modern/debug/app-modern-debug.apk out/pocketdesk-debug.apk
+          cp android/app/build/outputs/apk/modern/release/app-modern-release.apk out/pocketdesk.apk
           if [ -f android-cert-sha256.txt ]; then cp android-cert-sha256.txt out/; fi
           ls -lh out
 

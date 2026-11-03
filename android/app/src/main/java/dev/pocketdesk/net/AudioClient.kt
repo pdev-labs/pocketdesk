@@ -6,6 +6,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Build
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -32,7 +33,7 @@ class AudioClient(
         fun onAudioState(playing: Boolean, detail: String?)
     }
 
-    private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -43,6 +44,7 @@ class AudioClient(
     private var socket: WebSocket? = null
     private var track: AudioTrack? = null
     private var focus: AudioFocusRequest? = null
+    private var legacyFocus: AudioManager.OnAudioFocusChangeListener? = null
 
     @Volatile
     private var closed = false
@@ -108,12 +110,6 @@ class AudioClient(
         } else {
             AudioFormat.CHANNEL_OUT_MONO
         }
-        val format = AudioFormat.Builder()
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(rate)
-            .setChannelMask(channelMask)
-            .build()
-
         val minimum = AudioTrack.getMinBufferSize(
             rate,
             channelMask,
@@ -122,17 +118,36 @@ class AudioClient(
         // ~200 ms: enough to ride out Wi-Fi jitter without feeling delayed.
         val bufferSize = maxOf(minimum, rate * channels * 2 / 5)
 
-        val output = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build(),
+        val output = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val format = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(rate)
+                .setChannelMask(channelMask)
+                .build()
+
+            AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                )
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(bufferSize)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+        } else {
+            // AudioTrack.Builder is API 23; Android 5.x needs the old constructor.
+            @Suppress("DEPRECATION")
+            AudioTrack(
+                AudioManager.STREAM_MUSIC,
+                rate,
+                channelMask,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize,
+                AudioTrack.MODE_STREAM,
             )
-            .setAudioFormat(format)
-            .setBufferSizeInBytes(bufferSize)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
+        }
 
         requestFocus()
         output.play()
@@ -140,17 +155,31 @@ class AudioClient(
     }
 
     private fun requestFocus() {
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build(),
-            )
-            .setOnAudioFocusChangeListener { }
-            .build()
-        focus = request
-        runCatching { audioManager.requestAudioFocus(request) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                )
+                .setOnAudioFocusChangeListener { }
+                .build()
+            focus = request
+            runCatching { audioManager.requestAudioFocus(request) }
+        } else {
+            // AudioFocusRequest is API 26; Android 5.x uses the listener form.
+            val listener = AudioManager.OnAudioFocusChangeListener { }
+            legacyFocus = listener
+            @Suppress("DEPRECATION")
+            runCatching {
+                audioManager.requestAudioFocus(
+                    listener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN,
+                )
+            }
+        }
     }
 
     private fun stopTrack() {
@@ -161,8 +190,16 @@ class AudioClient(
             runCatching { output.release() }
         }
         track = null
-        focus?.let { runCatching { audioManager.abandonAudioFocusRequest(it) } }
-        focus = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            focus?.let { runCatching { audioManager.abandonAudioFocusRequest(it) } }
+            focus = null
+        } else {
+            legacyFocus?.let {
+                @Suppress("DEPRECATION")
+                runCatching { audioManager.abandonAudioFocus(it) }
+            }
+            legacyFocus = null
+        }
     }
 
     fun close() {

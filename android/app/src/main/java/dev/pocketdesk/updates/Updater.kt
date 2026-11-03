@@ -51,7 +51,8 @@ sealed interface CheckResult {
  */
 class Updater(private val context: Context) {
 
-    private val base = "https://github.com/pdev-labs/pocketdesk/releases/latest/download"
+    private val manifest = BuildConfig.UPDATE_MANIFEST
+    private val base = manifest.substringBeforeLast('/')
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -80,7 +81,7 @@ class Updater(private val context: Context) {
 
     private fun fetch(): CheckResult {
         // The timestamp keeps a CDN from serving yesterday's manifest.
-        val url = "$base/latest.json?t=${System.currentTimeMillis()}"
+        val url = "$manifest?t=${System.currentTimeMillis()}"
         val request = Request.Builder().url(url).header("User-Agent", userAgent).build()
 
         client.newCall(request).execute().use { response ->
@@ -224,7 +225,7 @@ class Updater(private val context: Context) {
         }
     }
 
-    fun releasesPage(): Uri = Uri.parse("https://github.com/pdev-labs/pocketdesk/releases/latest")
+    fun releasesPage(): Uri = Uri.parse(BuildConfig.UPDATE_PAGE)
 
     @Suppress("DEPRECATION")
     private fun sameSignature(apk: File): Boolean {
