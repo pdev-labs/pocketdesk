@@ -18,7 +18,7 @@
 | --- | --- |
 | Linux host (Hyprland/Sway/grim, X11/ffmpeg) | **Working** — screen, pointer, keyboard |
 | Android client | **Working** — stream over Wi-Fi or USB cable, direct touch or touchpad gestures, keyboard, QR pairing, background session, quality presets, second screen, phone audio, in-app updates |
-| Windows host | **Working** — screen via `gdigrab`, pointer + keyboard through `SendInput` (second screen and audio are Linux-only) |
+| Windows host | **Working** — screen via `gdigrab`, pointer + keyboard through `SendInput` (audio and second screen are Linux-only for now; see [second screen](docs/second-screen.md)) |
 | macOS host | Preview — screen via `avfoundation`, input not implemented yet |
 | Clipboard, file transfer | Roadmap |
 
@@ -320,6 +320,10 @@ screen for itself:
   choose mirror see that same base output.
 * Second screen needs **Hyprland** (it is built on `hyprctl`'s headless outputs).
   On X11, Windows and macOS, mirroring still works.
+* **Windows:** the monitor itself has to come from a virtual display driver (or a
+  dummy HDMI/DP plug), and the host still needs per-monitor capture — see
+  [docs/second-screen.md](docs/second-screen.md) for exactly what to install and
+  what is missing today.
 
 ## Why it is built this way
 
@@ -401,6 +405,7 @@ android/           Kotlin app: session hub + foreground service, CameraX/ML Kit 
 docs/              architecture, wire protocol, Linux setup, security, roadmap
 ```
 
+* [docs/second-screen.md](docs/second-screen.md)
 * [docs/architecture.md](docs/architecture.md)
 * [docs/protocol.md](docs/protocol.md)
 * [docs/linux-setup.md](docs/linux-setup.md)
