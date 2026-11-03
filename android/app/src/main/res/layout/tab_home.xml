@@ -260,7 +260,6 @@
                         android:id="@+id/tokenField"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="K7M4-QX2B"
                         android:importantForAutofill="no"
                         android:inputType="textCapCharacters|textNoSuggestions"
                         android:maxLength="128"

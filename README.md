@@ -75,6 +75,9 @@ No 64-character tokens, no typing IP addresses twice.
 Grab the files from [Releases](https://github.com/pdev-labs/pocketdesk/releases):
 
 * **Phone:** `pocketdesk.apk` (Android 8+). Sideload it; there is no Play Store listing.
+* **Older phones (Android 5.0 – 7.1):** `pocketdesk-legacy.apk` from the
+  [`legacy-latest`](https://github.com/pdev-labs/pocketdesk/releases/tag/legacy-latest)
+  prerelease — see [the legacy install guide](docs/legacy-install.md).
 * **Linux:** `pocketdesk-linux-x86_64.tar.gz`, unpack it anywhere.
 * **Windows 10/11 (64-bit):** `pocketdesk-windows-x86_64.exe`. Install
   [ffmpeg](https://ffmpeg.org/download.html) first (`winget install ffmpeg`), put
@@ -101,6 +104,26 @@ tar xzf pocketdesk-linux-x86_64.tar.gz
 cd pocketdesk-linux-x86_64
 ./pocketdesk
 ```
+
+### Older phones (Android 5.0 – 7.1)
+
+There is a second build for phones that never got Android 8:
+**[PocketDesk Legacy](https://github.com/pdev-labs/pocketdesk/releases/tag/legacy-latest)**
+(`pocketdesk-legacy.apk`, minimum Android 5.0 / API 21). It is the same app —
+discovery, QR pairing, touch and touchpad input, keyboard combos, audio, screen
+modes, second screen — with the platform calls that only exist on newer Android
+replaced by their older equivalents.
+
+* It is a **separate installation** (`dev.pocketdesk.legacy`), labelled
+  *PocketDesk Legacy* with its own icon. Both apps can live on the same phone.
+* It has its own update channel: the app checks `latest-legacy.json` from the
+  `legacy-latest` prerelease, so a legacy build never shadows the normal update.
+* It is signed with the **same permanent key** as the normal app.
+
+The full walkthrough — per-version “Unknown sources” steps, Play Protect,
+updating, and a troubleshooting table — is in
+[docs/legacy-install.md](docs/legacy-install.md). On old hardware, start with
+the **Low data** preset (10 fps, q45, 0.75×).
 
 ### The app
 
@@ -425,6 +448,7 @@ android/           Kotlin app: session hub + foreground service, CameraX/ML Kit 
 docs/              architecture, wire protocol, Linux setup, security, roadmap
 ```
 
+* [docs/legacy-install.md](docs/legacy-install.md)
 * [docs/second-screen.md](docs/second-screen.md)
 * [docs/architecture.md](docs/architecture.md)
 * [docs/protocol.md](docs/protocol.md)

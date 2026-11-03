@@ -34,7 +34,8 @@ Notes:
   it can live next to the normal app.
 * Keyboard input accepts both `commitText` and key-event typing, which is what
   older keyboards on Android 5–7 use.
-* Every push to the `legacy` branch republishes the APK, `latest-legacy.json`
-  and checksums below, and the app follows this tag when checking for updates.
+* Every push to `main` rebuilds the legacy flavour and republishes the APK,
+  `latest-legacy.json` and checksums below; the app follows this tag when checking
+  for updates.
 * This release is marked **prerelease** on purpose: the normal app keeps
   updating from `releases/latest`.
